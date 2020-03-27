@@ -1904,6 +1904,26 @@ ChatTagFlags Player::GetChatTag() const
     return tag;
 }
 
+bool Player::isAcceptTickets() const
+{
+    AccountTypes level = GetSession()->GetSecurity();
+
+    if (level > SEC_PLAYER && level >= sWorld.getConfig(CONFIG_UINT32_GM_LEVEL_ACCEPT_TICKETS))
+        return (m_ExtraFlags & PLAYER_EXTRA_GM_ACCEPT_TICKETS);
+
+    return false;
+}
+
+bool Player::isGMChat() const
+{
+    AccountTypes level = GetSession()->GetSecurity();
+
+    if (level > SEC_PLAYER && level >= sWorld.getConfig(CONFIG_UINT32_GM_LEVEL_CHAT))
+        return (m_ExtraFlags & PLAYER_EXTRA_GM_CHAT);
+
+    return false;
+}
+
 bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options /*=0*/, AreaTrigger const* at /*=nullptr*/)
 {
     // do not let charmed players/creatures teleport
@@ -2967,7 +2987,7 @@ void Player::InitStatsForLevel(bool reapplyMods)
                UNIT_FLAG_STUNNED        | UNIT_FLAG_IN_COMBAT    | UNIT_FLAG_DISARMED         |
                UNIT_FLAG_CONFUSED       | UNIT_FLAG_FLEEING      | UNIT_FLAG_POSSESSED        |
                UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_SKINNABLE    | UNIT_FLAG_MOUNT            |
-               UNIT_FLAG_TAXI_FLIGHT);
+               UNIT_FLAG_TAXI_FLIGHT    | UNIT_FLAG_UNK_29);
     SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);    // must be set
 
     SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_REGENERATE_POWER); // must be set
