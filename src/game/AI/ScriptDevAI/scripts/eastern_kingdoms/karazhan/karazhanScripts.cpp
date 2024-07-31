@@ -174,7 +174,7 @@ struct npc_barnesAI : public npc_escortAI, private DialogueHelper
         }
     }
 
-    void UpdateEscortAI(const uint32 uiDiff) { DialogueUpdate(uiDiff); }
+    void UpdateEscortAI(const uint32 uiDiff) override { DialogueUpdate(uiDiff); }
 };
 
 UnitAI* GetAI_npc_barnesAI(Creature* pCreature)
@@ -441,7 +441,7 @@ struct npc_image_of_medivhAI : public ScriptedAI, private DialogueHelper
 
     void SetEventStarter(ObjectGuid m_starterGuid) { m_eventStarterGuid = m_starterGuid; }
 
-    void UpdateAI(const uint32 uiDiff) { DialogueUpdate(uiDiff); }
+    void UpdateAI(const uint32 uiDiff) override { DialogueUpdate(uiDiff); }
 };
 
 UnitAI* GetAI_npc_image_of_medivhAI(Creature* pCreature)
@@ -589,6 +589,19 @@ struct WhipFrenzyHorses : public SpellScript
     }
 };
 
+// 29521 - Dance Vibe
+struct DanceVibe : public AuraScript
+{
+    bool OnAreaAuraCheckTarget(Aura const* aura, Unit* target) const override
+    {
+        CreatureGroup const* creatureGroup = static_cast<Creature*>(aura->GetCaster())->GetCreatureGroup();
+
+        if (creatureGroup && creatureGroup->HasGroupMember(target))
+            return true;
+        return false;
+    }
+};
+
 void AddSC_karazhan()
 {
     Script* pNewScript = new Script;
@@ -618,4 +631,5 @@ void AddSC_karazhan()
     RegisterSpellScript<WrathOfTheTitansProcAura>("spell_wrath_of_the_titans_proc_aura");
     RegisterSpellScript<HealingTouchHorses>("spell_healing_touch_horses");
     RegisterSpellScript<WhipFrenzyHorses>("spell_whip_frenzy_horses");
+    RegisterSpellScript<DanceVibe>("spell_dance_vibe");
 }

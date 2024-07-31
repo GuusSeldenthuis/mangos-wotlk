@@ -457,7 +457,6 @@ extern void AddSC_boss_high_king_maulgar();
 extern void AddSC_instance_gruuls_lair();
 extern void AddSC_boss_broggok();                           // HC, blood_furnace
 extern void AddSC_boss_kelidan_the_breaker();
-extern void AddSC_boss_the_maker();
 extern void AddSC_instance_blood_furnace();
 extern void AddSC_boss_nazan_and_vazruden();                // HC, hellfire_ramparts
 extern void AddSC_boss_omor_the_unscarred();
@@ -470,6 +469,7 @@ extern void AddSC_boss_warbringer_omrogg();
 extern void AddSC_boss_warchief_kargath_bladefist();
 extern void AddSC_shattered_halls();
 extern void AddSC_instance_shattered_halls();
+extern void AddSC_instance_botanica();
 extern void AddSC_arcatraz();                               // TK, arcatraz
 extern void AddSC_boss_dalliah();
 extern void AddSC_boss_harbinger_skyriss();
@@ -959,7 +959,6 @@ void AddScripts()
     AddSC_instance_gruuls_lair();
     AddSC_boss_broggok();                                   // HC, blood_furnace
     AddSC_boss_kelidan_the_breaker();
-    AddSC_boss_the_maker();
     AddSC_instance_blood_furnace();
     AddSC_boss_nazan_and_vazruden();                        // HC, hellfire_ramparts
     AddSC_boss_omor_the_unscarred();
@@ -972,6 +971,7 @@ void AddScripts()
     AddSC_boss_warchief_kargath_bladefist();
     AddSC_shattered_halls();
     AddSC_instance_shattered_halls();
+    AddSC_instance_botanica();
     AddSC_arcatraz();                                       // TK, arcatraz
     AddSC_boss_dalliah();
     AddSC_boss_harbinger_skyriss();

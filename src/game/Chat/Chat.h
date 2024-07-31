@@ -153,6 +153,7 @@ class ChatHandler
         char* ExtractKeyFromLink(char** text, char const* linkType, char** something1 = nullptr);
         static char* ExtractKeyFromLink(char** text, char const* const* linkTypes, int* found_idx = nullptr, char** something1 = nullptr);
         bool  ExtractUint32KeyFromLink(char** text, char const* linkType, uint32& value);
+        bool  ExtractUint32KeysFromLink(char** text, char const* linkType1, char const* linkType2, uint32& value1, uint32& value2);
 
         uint32 ExtractAccountId(char** args, std::string* accountName = nullptr, Player** targetIfNullArg = nullptr);
         uint32 ExtractSpellIdFromLink(char** text);
@@ -286,7 +287,11 @@ class ChatHandler
         bool HandleDebugByteFields(char* args);
         bool HandleDebugSpellVisual(char* args);
         bool HandleDebugMoveflags(char* args);
-        bool HandleDebugLootDropStats(char* args);
+
+        bool LootStatsHelper(char* args, bool full);
+        bool HandleLootStatsCommand(char* args);
+        bool HandleLootFullStatsCommand(char* args);
+
         bool HandleDebugOverflowCommand(char* args);
         bool HandleDebugChatFreezeCommand(char* args);
         bool HandleDebugLfgCommand(char* args);
@@ -359,6 +364,7 @@ class ChatHandler
         bool HandleGMCommand(char* args);
         bool HandleGMChatCommand(char* args);
         bool HandleGMFlyCommand(char* args);
+        bool HandleGMUnkillableCommand(char* args);
         bool HandleGMListFullCommand(char* args);
         bool HandleGMListIngameCommand(char* args);
         bool HandleGMMountUpCommand(char* args);
@@ -375,6 +381,7 @@ class ChatHandler
         bool HandleGoXYCommand(char* args);
         bool HandleGoXYZCommand(char* args);
         bool HandleGoZoneXYCommand(char* args);
+        bool HandleGoNextCommand(char* args);
 
         bool HandleGuildCreateCommand(char* args);
         bool HandleGuildInviteCommand(char* args);
@@ -629,7 +636,6 @@ class ChatHandler
         bool HandleReloadSpellLearnSpellCommand(char* args);
         bool HandleReloadSpellProcEventCommand(char* args);
         bool HandleReloadSpellProcItemEnchantCommand(char* args);
-        bool HandleReloadSpellBonusesCommand(char* args);
         bool HandleReloadSpellScriptTargetCommand(char* args);
         bool HandleReloadSpellTargetPositionCommand(char* args);
         bool HandleReloadSpellThreatsCommand(char* args);
@@ -791,7 +797,7 @@ class ChatHandler
         bool HandleWaterwalkCommand(char* args);
         bool HandleQuitCommand(char* args);
         bool HandleShowGearScoreCommand(char* args);
-#ifdef BUILD_PLAYERBOT
+#ifdef BUILD_DEPRECATED_PLAYERBOT
         bool HandlePlayerbotCommand(char* args);
 #endif
 
@@ -829,6 +835,7 @@ class ChatHandler
         bool HandleSunwellGateCommand(char* args);
         bool HandleSunwellGateCounterCommand(char* args);
         bool HandleExpansionRelease(char* args);
+        bool HandleSetVariable(char* args);
 
         // Battleground
         bool HandleBattlegroundStartCommand(char* args);

@@ -126,6 +126,7 @@ UPDATE gameobject_template SET ScriptName='go_midsummer_music' WHERE entry=18817
 UPDATE gameobject_template SET ScriptName='go_brewfest_music' WHERE entry=186221;
 UPDATE gameobject_template SET ScriptName='go_elemental_rift' WHERE entry IN (179664, 179665, 179666, 179667);
 UPDATE gameobject_template SET ScriptName='go_dragon_head' WHERE entry IN(179556,179558,179881,179882);
+UPDATE gameobject_template SET ScriptName='go_bubbly_fissure' WHERE entry=177524;
 UPDATE gameobject_template SET ScriptName='go_unadorned_spike' WHERE entry IN(175787);
 UPDATE gameobject_template SET ScriptName='go_containment_coffer' WHERE entry=122088;
 UPDATE gameobject_template SET ScriptName='go_large_jack_o_lantern' WHERE entry=186887;
@@ -668,7 +669,8 @@ INSERT INTO scripted_areatrigger VALUES
 (4501,'at_bartolo_ginsetti'),
 (4502,'at_beggar'),
 (4503,'at_beggar'),
-(4504,'at_beggar');
+(4504,'at_beggar'),
+(4498,'at_southshore_inn');
 
 /* THE CULLING OF STRATHOLME */
 UPDATE instance_template SET ScriptName='instance_culling_of_stratholme' WHERE map=595;
@@ -902,7 +904,6 @@ UPDATE gameobject_template SET ScriptName='go_plague_cauldron' WHERE entry = 190
 /* EVERSONG WOODS */
 UPDATE creature_template SET ScriptName='npc_kelerun_bloodmourn' WHERE entry=17807;
 UPDATE gameobject_template SET ScriptName='go_harbinger_second_trial' WHERE entry=182052;
-UPDATE creature_template SET ScriptName='npc_prospector_anvilward' WHERE entry=15420;
 UPDATE creature_template SET ScriptName='npc_apprentice_mirveda' WHERE entry=15402;
 UPDATE creature_template SET ScriptName='npc_infused_crystal' WHERE entry=16364;
 
@@ -961,10 +962,10 @@ UPDATE instance_template SET ScriptName='instance_gundrak' WHERE map=604;
 
 /* BLOOD FURNACE */
 /* The Maker,Broggok,Kelidan,Broggok's cloud */
-UPDATE creature_template SET ScriptName='boss_the_maker' WHERE entry=17381;
 UPDATE creature_template SET ScriptName='boss_broggok' WHERE entry=17380;
 UPDATE creature_template SET ScriptName='boss_kelidan_the_breaker' WHERE entry=17377;
 UPDATE creature_template SET ScriptName='mob_shadowmoon_channeler' WHERE entry=17653;
+UPDATE creature_template SET ScriptName='npc_fel_orc' WHERE entry IN (17398, 17429);
 UPDATE gameobject_template SET ScriptName='go_prison_cell_lever' WHERE entry=181982;
 UPDATE instance_template SET ScriptName='instance_blood_furnace' WHERE map=542;
 
@@ -1599,6 +1600,7 @@ UPDATE creature_template SET ScriptName='boss_laj' WHERE entry=17980;
 UPDATE creature_template SET ScriptName='boss_warp_splinter' WHERE entry=17977;
 UPDATE creature_template SET ScriptName='mob_warp_splinter_treant' WHERE entry=19949;
 UPDATE creature_template SET ScriptName='boss_thorngrin' WHERE entry IN(17978);
+UPDATE instance_template SET ScriptName='instance_botanica' WHERE map=553;
 
 /* THE ARCATRAZ */
 UPDATE instance_template SET ScriptName='instance_arcatraz' WHERE map=552;
@@ -2026,12 +2028,6 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadc
 -- -1 000 100 GENERAL MAPS (not instance maps)
 INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadcast_text_id,comment) VALUES
 ('-1000100','Come, little ones. Face me!','0','1','0','0','9071','azuregos SAY_TELEPORT'),
-
-('-1000101','Follow me, $N. I''ll take you to the Defias hideout. But you better protect me or I am as good as dead','0','0','7','0','9','defias traitor SAY_START'),
-('-1000102','The entrance is hidden here in Moonbrook. Keep your eyes peeled for thieves. They want me dead.','0','0','7','0','10','defias traitor SAY_PROGRESS'),
-('-1000103','You can go tell Stoutmantle this is where the Defias Gang is holed up, $N.','0','0','7','0','11','defias traitor SAY_END'),
-('-1000104','$N coming in fast! Prepare to fight!','0','0','7','0','489','defias traitor SAY_AGGRO_1'),
-('-1000105','Help!','0','0','7','0','1277','defias traitor SAY_AGGRO_2'),
 
 ('-1000106','Everyone ready?','0','0','1','0','8284','torek SAY_READY'),
 ('-1000107','Ok, Lets move out!','0','0','1','0','8278','torek SAY_MOVE'),
@@ -2535,22 +2531,11 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadc
 ('-1000559','I''d rather die fighting than live like a slave.','0','0','0','0','30795','exhausted vrykul SAY_RAND_ATTACK2'),
 ('-1000560','Enough! I will teach you some manners, wench!','0','0','0','0','30794','exhausted vrykul SAY_RAND_ATTACK3'),
 
-('-1000561','My wounds are grave. Forgive my slow pace but my injuries won''t allow me to walk any faster.','0','0','0','0','25','SAY_CORPORAL_KEESHAN_1'),
-('-1000562','Ah, fresh air, at last! I need a moment to rest.','0','0','0','0','26','SAY_CORPORAL_KEESHAN_2'),
-('-1000563','The Blackrock infestation is thick in these parts. I will do my best to keep the pace. Let''s go!','0','0','0','0','27','SAY_CORPORAL_KEESHAN_3'),
-('-1000564','Marshal Marris, sir. Corporal Keeshan of the 12th Sabre Regiment returned from battle and reporting for duty!','0','0','0','0','29','SAY_CORPORAL_KEESHAN_4'),
-('-1000565','Brave adventurer, thank you for rescuing me! I am sure Marshal Marris will reward your kind deed.','0','0','0','0','30','SAY_CORPORAL_KEESHAN_5'),
-
 ('-1000566','Stand back! Stand clear! The infernal will need to be given a wide berth!','0','0','0','0','9634','SAY_NIBY_1'),
 ('-1000567','BOW DOWN TO THE ALMIGHTY! BOW DOWN BEFORE MY INFERNAL DESTRO... chicken?','0','0','0','0','9635','SAY_NIBY_2'),
 ('-1000568','%s rolls on the floor laughing.','0','2','0','0','9636','EMOTE_IMPSY_1'),
 ('-1000569','Niby, you'' re an idiot.','0','0','0','0','9637','SAY_IMPSY_1'),
 ('-1000570','Silence, servant! Vengeance will be mine! Death to Stormwind! Death by chicken!','0','0','0','0','9638','SAY_NIBY_3'),
-
-('-1000571','Help! I''ve only one hand to defend myself with.','0','0','0','0','510','SAY_MIRAN_1'),
-('-1000572','Feel the power of the Dark Iron Dwarves!','0','0','0','0','1936','SAY_DARK_IRON_DWARF'),
-('-1000573','Send them on! I''m not afraid of some scrawny beasts!','0','0','0','0','511','SAY_MIRAN_2'),
-('-1000574','Ah, here at last! It''s going to feel so good to get rid of these barrels.','0','0','0','0','498','SAY_MIRAN_3'),
 
 ('-1000575','Together we will fight our way out of here. Are you ready?','0','0','0','0','24310','Lurgglbr - SAY_START_1'),
 ('-1000576','Then we leave.','0','0','0','0','24311','Lurgglbr - SAY_START_2'),
@@ -4227,14 +4212,6 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadc
 ('-1532016','I''ve gone and made a mess.','9315','1','0','0','0','moroes SAY_KILL_3'),
 ('-1532017','How terribly clumsy of me.','9213','1','0','0','15022','moroes SAY_DEATH'),
 
-('-1532018','Your behavior will not be tolerated.','9204','1','0','0','15079','maiden SAY_AGGRO'),
-('-1532019','Ah ah ah...','9207','1','0','0','15082','maiden SAY_SLAY1'),
-('-1532020','This is for the best.','9312','1','0','0','15084','maiden SAY_SLAY2'),
-('-1532021','Impure thoughts lead to profane actions.','9311','1','0','0','15083','maiden SAY_SLAY3'),
-('-1532022','Cast out your corrupt thoughts.','9313','1','0','0','15080','maiden SAY_REPENTANCE1'),
-('-1532023','Your impurity must be cleansed.','9208','1','0','0','13396','maiden SAY_REPENTANCE2'),
-('-1532024','Death comes. Will your conscience be clear?','9206','1','0','0','15081','maiden SAY_DEATH'),
-
 ('-1532025','Oh at last, at last I can go home!','9190','1','0','0','15068','dorothee SAY_DOROTHEE_DEATH'),
 ('-1532026','Don''t let them hurt us Tito! Oh, you won''t, will you?','9191','1','0','0','15066','dorothee SAY_DOROTHEE_SUMMON'),
 ('-1532027','Tito! Oh Tito, no!','9192','1','0','0','15069','dorothee SAY_DOROTHEE_TITO_DEATH'),
@@ -4684,24 +4661,6 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadc
 -- -1 543 000 HELLFIRE RAMPARTS
 
 -- -1 544 000 MAGTHERIDON'S LAIR
-INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadcast_text_id,comment) VALUES
-('-1544000','Wretched, meddling insects. Release me and perhaps i will grant you a merciful death!','10247','6','0','0','17339','magtheridon SAY_TAUNT1'),
-('-1544001','Vermin! Leeches! Take my blood and choke on it!','10248','6','0','0','17340','magtheridon SAY_TAUNT2'),
-('-1544002','Illidan is an arrogant fool. I will crush him and reclaim Outland as my own.','10249','6','0','0','17341','magtheridon SAY_TAUNT3'),
-('-1544003','Away, you mindless parasites. My blood is my own!','10250','6','0','0','17342','magtheridon SAY_TAUNT4'),
-('-1544004','How long do you believe your pathetic sorcery can hold me?','10251','6','0','0','17343','magtheridon SAY_TAUNT5'),
-('-1544005','My blood will be the end of you!','10252','6','0','0','17344','magtheridon SAY_TAUNT6'),
-('-1544006','I... am... unleashed!','10253','1','0','0','17346','magtheridon SAY_FREED'),
-('-1544007','Thank you for releasing me. Now...die!','10254','1','0','0','0','magtheridon SAY_AGGRO'),
-('-1544008','Not again... NOT AGAIN!','10256','1','0','0','17348','magtheridon SAY_BANISH'),
-('-1544009','I will not be taken so easily! Let the walls of this prison tremble... and fall!','10257','1','0','0','17336','magtheridon SAY_CHAMBER_DESTROY'),
-('-1544010','Did you think me weak? Soft? Who is the weak one now?!','10255','1','0','0','17349','magtheridon SAY_PLAYER_KILLED'),
-('-1544011','The Legion will consume you all!','10258','1','0','0','17347','magtheridon SAY_DEATH'),
-('-1544012','REUSE_ME','0','0','0','0','0','REUSE_ME'),
-('-1544013','%s begins to cast Blast Nova!','0','3','0','0','18739','magtheridon EMOTE_BLASTNOVA'),
-('-1544014','%s''s bonds begin to weaken!','0','2','0','0','13689','magtheridon EMOTE_BEGIN'),
-('-1544015','%s breaks free!','0','2','0','0','13691','magtheridon EMOTE_FREED'),
-('-1544016','%s is nearly free of his bonds!','0','2','0','0','13690','magtheridon EMOTE_NEARLY_FREE');
 
 -- -1 545 000 THE STEAMVAULT
 INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadcast_text_id,comment) VALUES
@@ -5759,17 +5718,6 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,broadc
 ('-1603023','<Angry roar>','15501','1','0','0','0','stonebark SAY_SLAY_1_STONE'),
 ('-1603024','Such a waste.','15502','1','0','0','34130','stonebark SAY_SLAY_2_STONE'),
 ('-1603025','Matron, flee! They are ruthless....','15503','1','0','0','34132','stonebark SAY_DEATH_STONE'),
-
-('-1603026','Insolent whelps! Your blood will temper the weapons used to reclaim this world!','15564','1','0','0','34306','ignis SAY_AGGRO'),
-('-1603027','Let the inferno consume you!','15567','1','0','0','34309','ignis SAY_SCORCH_1'),
-('-1603028','BURN! Burn in the makers fire!','15568','1','0','0','34310','ignis SAY_SCORCH_2'),
-('-1603029','I will burn away your impurities!','15566','1','0','0','34308','ignis SAY_SLAGPOT'),
-('-1603030','Arise, soldiers of the Iron Crucible! The Makers'' will be done!','15565','1','0','0','34307','ignis SAY_ADDS'),
-('-1603031','More scraps for the scrapheap!','15569','1','0','0','34311','ignis SAY_SLAY_1'),
-('-1603032','Your bones will serve as kindling!','15570','1','0','0','34312','ignis SAY_SLAY_2'),
-('-1603033','Let it be finished!','15571','1','0','0','33871','ignis SAY_BERSERK'),
-('-1603034','I. Have. Failed.','15572','1','0','0','34313','ignis SAY_DEATH'),
-('-1603035','Ignis the Furnace Master begins to cast Flame Jets!','0','3','0','0','0','ignis EMOTE_FLAME_JETS'),
 
 ('-1603036','Welcome, champions! All of our attempts at grounding her have failed. We could use a hand in bring her down with these harpoon guns.','15647','0','0','0','0','razorscale SAY_INTRO_WELCOME'),
 ('-1603037','Give us a moment to prepare to build the turrets.','0','1','0','0','33820','razorscale SAY_INTRO_1'),
@@ -7041,14 +6989,16 @@ INSERT INTO gossip_texts (entry,content_default,comment) VALUES
 (-3000105,'Ezekiel said that you might have a certain book...','dirty larry GOSSIP_ITEM_BOOK'),
 (-3000106,'Let Marshal Windsor know that I am ready.','squire rowe GOSSIP_ITEM_WINDSOR'),
 (-3000107,'I am ready, as are my forces. Let us end this masquerade!','reginald windsor GOSSIP_ITEM_START'),
-(-3000108,'I need a moment of your time, sir.','prospector anvilward GOSSIP_ITEM_MOMENT'),
 (-3000109,'I am ready, Oronok. Let us destroy Cyrukh and free the elements!','oronok torn-heart GOSSIP_ITEM_FIGHT'),
-(-3000110,'Why... yes, of course. I''ve something to show you right inside this building, Mr. Anvilward.','prospector anvilward GOSSIP_ITEM_SHOW'),
 (-3000111,'I am ready, Anchorite. Let us begin the exorcism.','anchorite barada GOSSIP_ITEM_EXORCISM'),
 (-3000112,'I''m ready - let''s get out of here.','injured goblin miner GOSSIP_ITEM_ESCORT_READY'),
 (-3000113,'Go on, you''re free. Get out of here!','saronite mine slave GOSSIP_ITEM_SLAVE_FREE'),
 (-3000114,'I''m ready to start the distillation, uh, Tipsy.','tipsy mcmanus GOSSIP_ITEM_START_DISTILLATION'),
-(-3000115,'Turn the key to start the machine.','threshwackonator  GOSSIP_ITEM_TURN_KEY');
+(-3000115,'Turn the key to start the machine.','threshwackonator  GOSSIP_ITEM_TURN_KEY'),
+(-3000120,'Pardon the intrusion, Lady Prestor, but Highlord Bolvar suggested that I seek your advice.','npc_lady_katrana_prestor GOSSIP_ITEM_KAT_1'),
+(-3000121,'My apologies, Lady Prestor.','npc_lady_katrana_prestor GOSSIP_ITEM_KAT_2'),
+(-3000122,'Begging your pardon','npc_lady_katrana_prestor GOSSIP_ITEM_KAT_3'),
+(-3000123,'Thank you for your time','npc_lady_katrana_prestor GOSSIP_ITEM_KAT_4');
 
 -- -3 033 000 SHADOWFANG KEEP
 INSERT INTO gossip_texts (entry,content_default,comment) VALUES
@@ -7262,129 +7212,6 @@ INSERT INTO gossip_texts (entry,content_default,comment) VALUES
 
 TRUNCATE script_waypoint;
 INSERT INTO script_waypoint (Entry, PathId, Point, PositionX, PositionY, PositionZ, Orientation, WaitTime, ScriptId, Comment) VALUES
-(349,0,1,-8769.59,-2185.73,141.975,0,0,0,''),
-(349,0,2,-8776.54,-2193.78,140.96,0,0,0,''),
-(349,0,3,-8783.29,-2194.82,140.462,0,0,0,''),
-(349,0,4,-8792.52,-2188.8,142.078,0,0,0,''),
-(349,0,5,-8807.55,-2186.1,141.504,0,0,0,''),
-(349,0,6,-8818,-2184.8,139.153,0,0,0,''),
-(349,0,7,-8825.81,-2188.84,138.459,0,0,0,''),
-(349,0,8,-8827.52,-2199.81,139.622,0,0,0,''),
-(349,0,9,-8821.14,-2212.64,143.126,0,0,0,''),
-(349,0,10,-8809.18,-2230.46,143.438,0,0,0,''),
-(349,0,11,-8797.04,-2240.72,146.548,0,0,0,''),
-(349,0,12,-8795.24,-2251.81,146.808,0,0,0,''),
-(349,0,13,-8780.16,-2258.62,148.554,0,0,0,''),
-(349,0,14,-8762.65,-2259.56,151.144,0,0,0,''),
-(349,0,15,-8754.36,-2253.74,152.243,0,0,0,''),
-(349,0,16,-8741.87,-2251,154.486,0,0,0,''),
-(349,0,17,-8733.22,-2251.01,154.36,0,0,0,''),
-(349,0,18,-8717.47,-2245.04,154.686,0,0,0,''),
-(349,0,19,-8712.24,-2246.83,154.709,0,0,0,''),
-(349,0,20,-8693.84,-2240.41,152.91,0,0,0,''),
-(349,0,21,-8681.82,-2245.33,155.518,0,0,0,''),
-(349,0,22,-8669.86,-2252.77,154.854,0,0,0,''),
-(349,0,23,-8670.56,-2264.69,156.978,0,0,0,''),
-(349,0,24,-8676.56,-2269.2,155.411,0,0,0,''),
-(349,0,25,-8673.34,-2288.65,157.054,0,0,0,''),
-(349,0,26,-8677.76,-2302.56,155.917,0,16000,0,'Corp. Keeshan - Short Break Outside'),
-(349,0,27,-8682.46,-2321.69,155.917,0,0,0,''),
-(349,0,28,-8690.4,-2331.78,155.971,0,0,0,''),
-(349,0,29,-8715.1,-2353.95,156.188,0,0,0,''),
-(349,0,30,-8748.04,-2370.7,157.988,0,0,0,''),
-(349,0,31,-8780.9,-2421.37,156.109,0,0,0,''),
-(349,0,32,-8792.01,-2453.38,142.746,0,0,0,''),
-(349,0,33,-8804.78,-2472.43,134.192,0,0,0,''),
-(349,0,34,-8841.35,-2503.63,132.276,0,0,0,''),
-(349,0,35,-8867.57,-2529.89,134.739,0,0,0,''),
-(349,0,36,-8870.67,-2542.08,131.044,0,0,0,''),
-(349,0,37,-8922.05,-2585.31,132.446,0,0,0,''),
-(349,0,38,-8949.08,-2596.87,132.537,0,0,0,''),
-(349,0,39,-8993.46,-2604.04,130.756,0,0,0,''),
-(349,0,40,-9006.71,-2598.47,127.966,0,0,0,''),
-(349,0,41,-9038.96,-2572.71,124.748,0,0,0,''),
-(349,0,42,-9046.92,-2560.64,124.447,0,0,0,''),
-(349,0,43,-9066.69,-2546.63,123.11,0,0,0,''),
-(349,0,44,-9077.54,-2541.67,121.17,0,0,0,''),
-(349,0,45,-9125.32,-2490.06,116.057,0,0,0,''),
-(349,0,46,-9145.06,-2442.24,108.232,0,0,0,''),
-(349,0,47,-9158.2,-2425.36,105.5,0,0,0,''),
-(349,0,48,-9151.92,-2393.67,100.856,0,0,0,''),
-(349,0,49,-9165.19,-2376.03,94.8215,0,0,0,''),
-(349,0,50,-9187.1,-2360.52,89.9231,0,0,0,''),
-(349,0,51,-9235.44,-2305.24,77.9253,0,0,0,''),
-(349,0,52,-9264.73,-2292.92,70.0089,0,0,0,''),
-(349,0,53,-9277.47,-2296.19,68.0896,0,2500,0,'Corp. Keeshan - quest-finish'),
-(349,0,54,-9277.47,-2296.19,68.0896,0,0,0,'Corp. Keeshan - Say Goodbye'),
-(467,0,1,-10508.4,1068,55.21,0,0,0,''),
-(467,0,2,-10518.3,1074.84,53.96,0,0,0,''),
-(467,0,3,-10534.8,1081.92,49.88,0,0,0,''),
-(467,0,4,-10546.5,1084.88,50.13,0,0,0,''),
-(467,0,5,-10555.3,1084.45,45.75,0,0,0,''),
-(467,0,6,-10566.6,1083.53,42.1,0,0,0,''),
-(467,0,7,-10575.8,1082.34,39.46,0,0,0,''),
-(467,0,8,-10585.7,1081.08,37.77,0,0,0,''),
-(467,0,9,-10600.1,1078.19,36.23,0,0,0,''),
-(467,0,10,-10608.7,1076.08,35.88,0,0,0,''),
-(467,0,11,-10621.3,1073,35.4,0,0,0,''),
-(467,0,12,-10638.1,1060.18,33.61,0,0,0,''),
-(467,0,13,-10655.9,1038.99,33.48,0,0,0,''),
-(467,0,14,-10664.7,1030.54,32.7,0,0,0,''),
-(467,0,15,-10708.7,1033.86,33.32,0,0,0,''),
-(467,0,16,-10754.4,1017.93,32.79,0,0,0,''),
-(467,0,17,-10802.3,1018.01,32.16,0,0,0,''),
-(467,0,18,-10832.6,1009.04,32.71,0,0,0,''),
-(467,0,19,-10866.6,1006.51,31.71,0,0,0,''),
-(467,0,20,-10880,1005.1,32.84,0,0,0,''),
-(467,0,21,-10892.5,1001.32,34.46,0,0,0,''),
-(467,0,22,-10906.1,997.11,36.15,0,0,0,''),
-(467,0,23,-10922.3,1002.23,35.74,0,0,0,''),
-(467,0,24,-10936.3,1023.38,36.52,0,0,0,''),
-(467,0,25,-10933.3,1052.61,35.85,0,0,0,''),
-(467,0,26,-10940.2,1077.66,36.49,0,0,0,''),
-(467,0,27,-10957.1,1099.33,36.83,0,0,0,''),
-(467,0,28,-10956.5,1119.9,36.73,0,0,0,''),
-(467,0,29,-10939.3,1150.75,37.42,0,0,0,''),
-(467,0,30,-10915.1,1202.09,36.55,0,0,0,''),
-(467,0,31,-10892.6,1257.03,33.37,0,0,0,''),
-(467,0,32,-10891.9,1306.66,35.45,0,0,0,''),
-(467,0,33,-10896.2,1327.86,37.77,0,0,0,''),
-(467,0,34,-10906,1368.05,40.91,0,0,0,''),
-(467,0,35,-10910.2,1389.33,42.62,0,0,0,''),
-(467,0,36,-10915.4,1417.72,42.93,0,0,0,''),
-(467,0,37,-10926.4,1421.18,43.04,0,0,0,'walk here and say'),
-(467,0,38,-10952.3,1421.74,43.4,0,0,0,''),
-(467,0,39,-10980,1411.38,42.79,0,0,0,''),
-(467,0,40,-11006.1,1420.47,43.26,0,0,0,''),
-(467,0,41,-11022,1450.59,43.09,0,0,0,''),
-(467,0,42,-11025.4,1491.59,43.15,0,0,0,''),
-(467,0,43,-11036.1,1508.32,43.28,0,0,0,''),
-(467,0,44,-11060.7,1526.72,43.19,0,0,0,''),
-(467,0,45,-11072.8,1527.77,43.2,3.22,5000,0,'say and quest credit'),
-(1379,0,1,-5751.12,-3441.01,301.743,0,0,0,''),
-(1379,0,2,-5738.58,-3485.14,302.41,0,0,0,''),
-(1379,0,3,-5721.62,-3507.85,304.011,0,0,0,''),
-(1379,0,4,-5710.21,-3527.97,304.708,0,0,0,''),
-(1379,0,5,-5706.92,-3542.89,304.871,0,0,0,''),
-(1379,0,6,-5701.53,-3551.24,305.962,0,0,0,''),
-(1379,0,7,-5699.53,-3555.69,306.505,0,0,0,''),
-(1379,0,8,-5690.56,-3571.98,309.035,0,0,0,''),
-(1379,0,9,-5678.61,-3587.17,310.607,0,0,0,''),
-(1379,0,10,-5677.05,-3594.35,311.527,0,0,0,''),
-(1379,0,11,-5674.39,-3605.19,312.239,0,0,0,''),
-(1379,0,12,-5674.45,-3614.39,312.337,0,0,0,''),
-(1379,0,13,-5673.05,-3630.56,311.105,0,0,0,''),
-(1379,0,14,-5680.34,-3645.44,315.185,0,0,0,''),
-(1379,0,15,-5684.46,-3650.05,314.687,0,0,0,''),
-(1379,0,16,-5693.9,-3674.14,313.03,0,0,0,''),
-(1379,0,17,-5701.43,-3712.54,313.959,0,0,0,''),
-(1379,0,18,-5698.79,-3720.88,316.943,0,0,0,''),
-(1379,0,19,-5699.95,-3733.63,318.597,0,0,0,'Protecting the Shipment - Ambush'),
-(1379,0,20,-5698.61,-3754.74,322.047,0,0,0,''),
-(1379,0,21,-5688.68,-3769,323.957,0,0,0,''),
-(1379,0,22,-5688.14,-3782.65,322.667,0,0,0,''),
-(1379,0,23,-5699.23,-3792.65,322.448,0,30000,0,'Protecting the Shipment - End'),
-(1379,0,24,-5700.8,-3792.78,322.588,0,0,5000,''),
 (1840,0,1,2689.68,-1937.47,72.14,0,0,0,''),
 (1840,0,2,2683.11,-1926.82,72.14,0,0,0,''),
 (1840,0,3,2678.73,-1919.42,68.86,2.11887,1000,0,'escort paused'),
@@ -8778,17 +8605,6 @@ INSERT INTO script_waypoint (Entry, PathId, Point, PositionX, PositionY, Positio
 (12858,0,21,1776.9,-2024.56,109.83,0,0,0,'win'),
 (12858,0,22,1776.87,-2028.31,109.83,0,60000,0,'stay'),
 (12858,0,23,1776.9,-2028.3,109.83,0,0,0,''),
-(15420, 0, 1, 9296.278, -6676.996, 22.358725, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 2, 9299.323, -6668.9614, 22.41846, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 3, 9303.353, -6666.7637, 22.432236, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 4, 9307.93, -6660.8057, 22.43064, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 5, 9309.302, -6656.1987, 23.005793, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 6, 9307.386, -6651.9053, 24.834118, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 7, 9300.505, -6648.1587, 28.052294, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 8, 9293.393, -6650.7246, 30.57717, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 9, 9290.5205, -6654.362, 31.830189, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 10, 9289.944, -6657.774, 31.828085, 100, 0, 0, 'Prospector Anvilward'),
-(15420, 0, 11, 9290.866, -6658.0156, 31.823935, 0.104719758033752441, 60000, 0, 'Prospector Anvilward'),
 (16812,0,1,-10868.3,-1779.84,90.476,0,2500,0,'Open door, begin walking'),
 (16812,0,2,-10875.6,-1779.58,90.478,0,0,0,''),
 (16812,0,3,-10887.4,-1779.26,90.476,0,0,0,''),

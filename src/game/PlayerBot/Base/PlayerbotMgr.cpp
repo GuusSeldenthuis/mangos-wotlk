@@ -41,7 +41,7 @@ Config botConfig;
 void PlayerbotMgr::SetInitialWorldSettings()
 {
     //Get playerbot configuration file
-    if (!botConfig.SetSource(_PLAYERBOT_CONFIG))
+    if (!botConfig.SetSource(_PLAYERBOT_CONFIG, "Mangosd_"))
         sLog.outError("Playerbot: Unable to open configuration file. Database will be unaccessible. Configuration values will use default.");
     else
         sLog.outString("Playerbot: Using configuration file %s", _PLAYERBOT_CONFIG.c_str());
@@ -1193,7 +1193,7 @@ uint32 Player::GetSpec()
 
 bool ChatHandler::HandlePlayerbotCommand(char* args)
 {
-    if (!(m_session->GetSecurity() > SEC_PLAYER))
+    if (m_session && !(m_session->GetSecurity() > SEC_PLAYER))
     {
         if (botConfig.GetBoolDefault("PlayerbotAI.DisableBots", false))
         {

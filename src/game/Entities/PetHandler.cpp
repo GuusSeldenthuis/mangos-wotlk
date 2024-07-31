@@ -21,7 +21,7 @@
 #include "Server/WorldSession.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
-#include "Log.h"
+#include "Log/Log.h"
 #include "Server/Opcodes.h"
 #include "Spells/Spell.h"
 #include "AI/BaseAI/CreatureAI.h"
@@ -835,14 +835,10 @@ void WorldSession::SendPetNameInvalid(uint32 error, const std::string& name, Dec
     WorldPacket data(SMSG_PET_NAME_INVALID, 4 + name.size() + 1 + 1);
     data << uint32(error);
     data << name;
+    data << uint8(declinedName != nullptr);
     if (declinedName)
-    {
-        data << uint8(1);
         for (const auto& i : declinedName->name)
             data << i;
-    }
-    else
-        data << uint8(0);
     SendPacket(data);
 }
 

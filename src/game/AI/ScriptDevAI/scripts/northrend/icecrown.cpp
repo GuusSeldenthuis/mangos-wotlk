@@ -1019,10 +1019,133 @@ struct DropOffCapturedCrusader : public SpellScript
         return SPELL_CAST_OK;
     }
 
-    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
+        if (effIdx != EFFECT_INDEX_0)
+            return;
+
         if (VehicleInfo* vehicle = spell->GetCaster()->GetVehicleInfo())
             vehicle->UnBoard(vehicle->GetPassenger(1), false);
+    }
+};
+
+// 56839 - To Icecrown Airship (A) - Summon Vehicle
+struct ToIcecrownAirshipASummonVehicle : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+    }
+};
+
+// 57418 - To Icecrown Airship (H) - Summon Vehicle
+struct ToIcecrownAirshipHSummonVehicle : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+    }
+};
+
+// 57534 - Frozen Siegebolt
+// 57650 - Frozen Siegebolt
+// 57666 - Frozen Siegebolt
+// 57667 - Frozen Siegebolt
+
+struct FrozenSiegebolt : public SpellScript
+{
+    void OnRadiusCalculate(Spell* /*spell*/, SpellEffectIndex effIdx, bool /*targetB*/, float& radius) const override
+    {
+        if (effIdx == EFFECT_INDEX_0)
+            radius = 100.f;
+    }
+};
+
+// 57385 - Argent Cannon
+struct ArgentCannon : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0)
+            return;
+
+        uint32 damage = spell->GetDamage();
+        Position pos = spell->m_targets.getDestination();
+        SpellCastArgs args;
+        args.SetDestination(pos);
+        Unit* caster = spell->GetCaster();
+        caster->CastSpell(args, damage, TRIGGERED_OLD_TRIGGERED);
+
+        caster->CastSpell(nullptr, 57608, TRIGGERED_OLD_TRIGGERED); // Powering Up The Core
+        if (caster->GetPower(caster->GetPowerType()) == caster->GetMaxPower(caster->GetPowerType()))
+            DoBroadcastText(31367, caster, nullptr, CHAT_TYPE_BOSS_EMOTE); // reckoning bomb ready text
+    }
+};
+
+// 57412 - Reckoning Bomb
+struct ReckoningBomb : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0)
+            return;
+
+        uint32 damage = spell->GetDamage();
+        Position pos = spell->m_targets.getDestination();
+        SpellCastArgs args;
+        args.SetDestination(pos);
+        spell->GetCaster()->CastSpell(args, damage, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 57415 - The Reckoning
+struct TheReckoning : public SpellScript
+{
+    // should hit nothing at this time
+    bool OnCheckTarget(const Spell* /*spell*/, GameObject* /*target*/, SpellEffectIndex /*eff*/) const { return false; }
+};
+
+// 57413 - Fitful Dream
+struct FitfulDream : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (!apply && aura->GetRemoveMode() == AURA_REMOVE_BY_DEFAULT)
+        {
+            aura->GetTarget()->CastSpell(nullptr, 57515, TRIGGERED_OLD_TRIGGERED);
+        }
+    }
+};
+
+// 57346 - Ride Vehicle
+struct RideVehicle_57346 : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (!apply && aura->GetRemoveMode() == AURA_REMOVE_BY_DEFAULT)
+        {
+            aura->GetCaster()->CastSpell(aura->GetCaster(), 45472, TRIGGERED_OLD_TRIGGERED);
+        }
+    }
+};
+
+// 59303 - Summon Frost Wyrm
+struct SummonFrostWyrm : public SpellScript
+{
+    void OnDestTarget(Spell* spell) const override
+    {
+        spell->m_targets.m_destPos.z += 50.f;
+    }
+};
+
+// 4328 - Drag and Drop: Summon Aldur'thar Sentry
+struct DragAndDropSummonAldurtharSentry : public SpellScript
+{
+    void OnDestTarget(Spell* spell) const override
+    {
+        spell->m_targets.m_destPos.z += 20.f;
     }
 };
 
@@ -1060,4 +1183,14 @@ void AddSC_icecrown()
     RegisterSpellScript<spell_create_lance>("spell_create_lance");
     RegisterSpellScript<GrabCapturedCrusader>("spell_grab_captured_crusader");
     RegisterSpellScript<DropOffCapturedCrusader>("spell_drop_off_captured_crusader");
+    RegisterSpellScript<ToIcecrownAirshipASummonVehicle>("spell_to_icecrown_air_ship_a_summon_vehicle");
+    RegisterSpellScript<ToIcecrownAirshipHSummonVehicle>("spell_to_icecrown_air_ship_h_summon_vehicle");
+    RegisterSpellScript<FrozenSiegebolt>("spell_frozen_siegebolt");
+    RegisterSpellScript<ArgentCannon>("spell_argent_cannon");
+    RegisterSpellScript<ReckoningBomb>("spell_reckoning_bomb");
+    RegisterSpellScript<TheReckoning>("spell_the_reckoning");
+    RegisterSpellScript<FitfulDream>("spell_fitful_dream");
+    RegisterSpellScript<RideVehicle_57346>("spell_ride_vehicle_57346");
+    RegisterSpellScript<SummonFrostWyrm>("spell_summon_frost_wyrm");
+    RegisterSpellScript<DragAndDropSummonAldurtharSentry>("spell_drag_and_drop_summon_aldurthar_sentry");
 }

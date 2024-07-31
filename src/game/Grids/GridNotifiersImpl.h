@@ -258,6 +258,9 @@ inline void MaNGOS::DynamicObjectUpdater::VisitHelper(Unit* target)
         }
     }
 
+    if (!i_dynobject.OnPersistentAreaAuraCheckTarget(target))
+        return;
+
     if (spellInfo->HasAttribute(SPELL_ATTR_EX3_ONLY_ON_PLAYER) && target->GetTypeId() != TYPEID_PLAYER)
         return;
 
@@ -689,7 +692,7 @@ void MaNGOS::LocalizedPacketDo<Builder>::operator()(Player* p)
         if (i_data_cache.size() < cache_idx + 1)
             i_data_cache.resize(cache_idx + 1);
 
-        auto data = std::unique_ptr<WorldPacket>(new WorldPacket());
+        std::unique_ptr<WorldPacket> data = std::make_unique<WorldPacket>();
 
         i_builder(*data, loc_idx);
 

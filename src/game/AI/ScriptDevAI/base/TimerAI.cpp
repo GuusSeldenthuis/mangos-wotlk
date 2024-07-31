@@ -16,7 +16,7 @@
 
 #include "TimerAI.h"
 #include "Chat/Chat.h"
-#include "Log.h"
+#include "Log/Log.h"
 #include <string>
 
 Timer::Timer(uint32 id, std::function<void()> functor, uint32 timerMin, uint32 timerMax, TimerCombat combatSetting, bool disabled)
@@ -28,7 +28,7 @@ bool Timer::UpdateTimer(const uint32 diff, bool combat)
     if (disabled)
         return false;
 
-    if (combatSetting != TIMER_ALWAYS && combatSetting != combat)
+    if (combatSetting != TIMER_ALWAYS && bool(combatSetting) != combat)
         return false;
 
     if (timer <= diff)
@@ -163,7 +163,7 @@ void TimerManager::GetAIInformation(ChatHandler& reader)
     for (auto itr = m_timers.begin(); itr != m_timers.end(); ++itr)
     {
         Timer& timer = (*itr).second;
-        output += "Timer ID: " + std::to_string(timer.id) + " Timer: " + std::to_string(timer.timer), +" Disabled: " + std::to_string(timer.disabled) + "\n";
+        output += "Timer ID: " + std::to_string(timer.id) + " Timer: " + std::to_string(timer.timer) +" Disabled: " + std::to_string(timer.disabled) + "\n";
     }
     reader.PSendSysMessage("%s", output.data());
 }
@@ -301,7 +301,7 @@ void CombatActions::GetAIInformation(ChatHandler& reader)
     for (auto itr = m_combatActions.begin(); itr != m_combatActions.end(); ++itr)
     {
         Timer& timer = (*itr).second;
-        output += "Timer ID: " + std::to_string(timer.id) + " Timer: " + std::to_string(timer.timer), +" Disabled: " + std::to_string(timer.disabled) + "\n";
+        output += "Timer ID: " + std::to_string(timer.id) + " Timer: " + std::to_string(timer.timer) +" Disabled: " + std::to_string(timer.disabled) + "\n";
     }
     reader.PSendSysMessage("%s", output.data());
 }

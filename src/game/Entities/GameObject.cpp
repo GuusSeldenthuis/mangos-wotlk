@@ -711,6 +711,9 @@ void GameObject::Update(const uint32 diff)
             if (AI())
                 AI()->JustDespawned();
 
+            if (InstanceData* iData = GetMap()->GetInstanceData())
+                iData->OnObjectDespawn(this);
+
             if (!m_respawnOverriden)
             {
                 // since pool system can fail to roll unspawned object, this one can remain spawned, so must set respawn nevertheless
@@ -811,6 +814,9 @@ void GameObject::Delete()
 
     if (AI())
         AI()->JustDespawned();
+
+    if (InstanceData* iData = GetMap()->GetInstanceData())
+        iData->OnObjectDespawn(this);
 
     if (uint16 poolid = sPoolMgr.IsPartOfAPool<GameObject>(GetDbGuid()))
         sPoolMgr.UpdatePool<GameObject>(*GetMap()->GetPersistentState(), poolid, GetDbGuid());
@@ -1624,6 +1630,12 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             std::tie(slotX, slotY) = GetClosestChairSlotPosition(user);
             user->NearTeleportTo(slotX, slotY, GetPositionZ(), GetOrientation());
             user->SetStandState(UNIT_STAND_STATE_SIT_LOW_CHAIR + info->chair.height);
+
+            if (uint32 eventId = GetGOInfo()->chair.triggeredEvent)
+            {
+                DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "Chair ScriptStart id %u for %s (Used by %s).", eventId, GetGuidStr().c_str(), player->GetGuidStr().c_str());
+                StartEvents_Event(GetMap(), eventId, user, this);
+            }
             return;
         }
         case GAMEOBJECT_TYPE_SPELL_FOCUS:                   // 8
@@ -2294,56 +2306,6 @@ bool GameObject::IsInSkillupList(Player* player) const
 void GameObject::AddToSkillupList(Player* player)
 {
     m_SkillupSet.insert(player->GetObjectGuid());
-}
-
-struct AddGameObjectToRemoveListInMapsWorker
-{
-    AddGameObjectToRemoveListInMapsWorker(ObjectGuid guid) : i_guid(guid) {}
-
-    void operator()(Map* map)
-    {
-        if (GameObject* pGameobject = map->GetGameObject(i_guid))
-            pGameobject->Delete();
-    }
-
-    ObjectGuid i_guid;
-};
-
-void GameObject::AddToRemoveListInMaps(uint32 db_guid, GameObjectData const* data)
-{
-    AddGameObjectToRemoveListInMapsWorker worker(ObjectGuid(HIGHGUID_GAMEOBJECT, data->id, db_guid));
-    sMapMgr.DoForAllMapsWithMapId(data->mapid, worker);
-}
-
-struct SpawnGameObjectInMapsWorker
-{
-    SpawnGameObjectInMapsWorker(uint32 guid, GameObjectData const* data)
-        : i_guid(guid), i_data(data) {}
-
-    void operator()(Map* map)
-    {
-        // Spawn if necessary (loaded grids only)
-        if (map->IsLoaded(i_data->posX, i_data->posY))
-        {
-            GameObjectData const* data = sObjectMgr.GetGOData(i_guid);
-            MANGOS_ASSERT(data);
-            GameObject* pGameobject = GameObject::CreateGameObject(data->id);
-            // DEBUG_LOG("Spawning gameobject %u", *itr);
-            if (!pGameobject->LoadFromDB(i_guid, map, i_guid, 0))
-            {
-                delete pGameobject;
-            }
-        }
-    }
-
-    uint32 i_guid;
-    GameObjectData const* i_data;
-};
-
-void GameObject::SpawnInMaps(uint32 db_guid, GameObjectData const* data)
-{
-    SpawnGameObjectInMapsWorker worker(db_guid, data);
-    sMapMgr.DoForAllMapsWithMapId(data->mapid, worker);
 }
 
 bool GameObject::HasStaticDBSpawnData() const

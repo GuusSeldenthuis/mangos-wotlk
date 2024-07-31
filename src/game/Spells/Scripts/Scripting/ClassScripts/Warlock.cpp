@@ -65,8 +65,8 @@ struct LifeTap : public SpellScript
         if (Player* modOwner = caster->GetSpellModOwner())
             modOwner->ApplySpellMod(spell->m_spellInfo->Id, SPELLMOD_COST, cost);
 
-        int32 dmg = caster->SpellDamageBonusDone(caster, SpellSchoolMask(spell->m_spellInfo->SchoolMask), spell->m_spellInfo, uint32(cost > 0 ? cost : 0), SPELL_DIRECT_DAMAGE);
-        dmg = caster->SpellDamageBonusTaken(caster, SpellSchoolMask(spell->m_spellInfo->SchoolMask), spell->m_spellInfo, dmg, SPELL_DIRECT_DAMAGE);
+        int32 dmg = caster->SpellDamageBonusDone(caster, SpellSchoolMask(spell->m_spellInfo->SchoolMask), spell->m_spellInfo, EFFECT_INDEX_0, uint32(cost > 0 ? cost : 0), SPELL_DIRECT_DAMAGE);
+        dmg = caster->SpellDamageBonusTaken(caster, SpellSchoolMask(spell->m_spellInfo->SchoolMask), spell->m_spellInfo, EFFECT_INDEX_0, dmg, SPELL_DIRECT_DAMAGE);
         spell->SetScriptValue(dmg);
     }
 
@@ -229,8 +229,13 @@ struct EyeOfKilrogg : public SpellScript
     {
         summon->CastSpell(nullptr, 2585, TRIGGERED_OLD_TRIGGERED);
         summon->DisableThreatPropagationToOwner();
-        if (spell->GetCaster()->GetMapId() == 571) // Northrend - Flight
-            summon->CastSpell(nullptr, 58083, TRIGGERED_OLD_TRIGGERED);
+        if (spell->GetCaster()->HasAura(58081)) // Glyph of Kilrogg
+        {
+            MapEntry const* mapEntry = spell->GetCaster()->GetMap()->GetEntry();
+            if (mapEntry->addon < 1 || !mapEntry->IsContinent()) // flyable areas
+                return;
+            summon->CastSpell(nullptr, 58083, TRIGGERED_OLD_TRIGGERED); // flight
+        }
     }
 };
 
@@ -597,6 +602,74 @@ struct DrainSoul : public AuraScript
     }
 };
 
+// 63320 - Glyph of Life Tap
+struct GlyphOfLifeTap : public AuraScript
+{
+    SpellAuraProcResult OnProc(Aura* aura, ProcExecutionData& procData) const override
+    {
+        procData.triggeredSpellId = 63321;
+        return SPELL_AURA_PROC_OK;
+    }
+};
+
+// 63310 - Glyph of Shadowflame
+struct GlyphOfShadowflame : public AuraScript
+{
+    SpellAuraProcResult OnProc(Aura* aura, ProcExecutionData& procData) const override
+    {
+        procData.triggeredSpellId = 63311;
+        return SPELL_AURA_PROC_OK;
+    }
+};
+
+// 6358 - Seduction
+struct SeductionSuccubus : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        bool hasGlyph = false;
+        if (Unit* caster = aura->GetCaster())
+            if (Unit* owner = caster->GetOwner())
+                if (owner->HasAura(56250)) // Glyph of Succubus
+                    hasGlyph = true;
+        if (apply && hasGlyph)
+        {
+            aura->GetTarget()->RemoveSpellsCausingAura(SPELL_AURA_PERIODIC_DAMAGE);
+            aura->GetTarget()->RemoveSpellsCausingAura(SPELL_AURA_PERIODIC_DAMAGE_PERCENT);
+        }
+    }
+};
+
+// 48181, 59161, 59163, 59164 - Haunt
+struct Haunt : public AuraScript, public SpellScript
+{
+    enum
+    {
+        SPELL_HAUNT_HEAL = 48210,
+    };
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply)
+        {
+            aura->SetScriptValue(0);
+            return;
+        }
+        Unit* caster = aura->GetCaster();
+        Unit* target = aura->GetTarget();
+        if (!caster)
+            return;
+        int32 bp0 = aura->GetScriptValue();
+        target->CastCustomSpell(caster, SPELL_HAUNT_HEAL, &bp0, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, aura);
+    }
+
+    void OnHit(Spell* spell, SpellMissInfo missInfo) const override
+    {
+        Unit* target = spell->GetUnitTarget();
+        if (Aura* dummy = target->GetDummyAura(spell->m_spellInfo->Id))
+            dummy->SetScriptValue(spell->GetTotalTargetDamage());
+    }
+};
+
 void LoadWarlockScripts()
 {
     RegisterSpellScript<UnstableAffliction>("spell_unstable_affliction");
@@ -619,4 +692,8 @@ void LoadWarlockScripts()
     RegisterSpellScript<GlyphOfShadowburn>("spell_glyph_of_shadowburn");
     RegisterSpellScript<DeathsEmbrace>("spell_deaths_embrace");
     RegisterSpellScript<DrainSoul>("spell_drain_soul");
+    RegisterSpellScript<GlyphOfLifeTap>("spell_glyph_of_life_tap");
+    RegisterSpellScript<GlyphOfShadowflame>("spell_glyph_of_shadowflame");
+    RegisterSpellScript<SeductionSuccubus>("spell_seduction_succubus");
+    RegisterSpellScript<Haunt>("spell_haunt");
 }

@@ -17,7 +17,7 @@
  */
 
 #include "Common.h"
-#include "Log.h"
+#include "Log/Log.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -1375,17 +1375,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                     target = this;
                     break;
                 }
-                // Shadowfiend Death (Gain mana if pet dies with Glyph of Shadowfiend)
-                case 57989:
-                {
-                    Unit* owner = GetOwner();
-                    if (!owner || owner->GetTypeId() != TYPEID_PLAYER)
-                        return SPELL_AURA_PROC_FAILED;
-
-                    // Glyph of Shadowfiend (need cast as self cast for owner, no hidden cooldown)
-                    owner->CastSpell(owner, 58227, TRIGGERED_OLD_TRIGGERED, castItem, triggeredByAura);
-                    return SPELL_AURA_PROC_OK;
-                }
                 // Kill Command, pet aura
                 case 58914:
                 {
@@ -1414,10 +1403,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                     basepoints[EFFECT_INDEX_0] = damage;
                     break;
                 }
-                // Glyph of Life Tap
-                case 63320:
-                    triggered_spell_id = 63321;
-                    break;
                 // Retaliation
                 case 65932:
                     triggered_spell_id = 65934;
@@ -1836,23 +1821,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                 case 28809:
                 {
                     triggered_spell_id = 28810;
-                    break;
-                }
-                // Glyph of Dispel Magic
-                case 55677:
-                {
-                    if (!target->CanAssist(this))
-                        return SPELL_AURA_PROC_FAILED;
-
-                    basepoints[0] = int32(target->GetMaxHealth() * triggerAmount / 100);
-                    // triggered_spell_id in spell data
-                    break;
-                }
-                // Glyph of Prayer of Healing
-                case 55680:
-                {
-                    basepoints[0] = int32(damage * triggerAmount  / 200);   // 10% each tick
-                    triggered_spell_id = 56161;             // Glyph of Prayer of Healing
                     break;
                 }
                 // Priest T10 Healer 2P Bonus
@@ -2375,13 +2343,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                         CastSpell(target, 53739, TRIGGERED_OLD_TRIGGERED, nullptr, triggeredByAura);
                     break;
                 }
-                // Glyph of Holy Light
-                case 54937:
-                {
-                    triggered_spell_id = 54968;
-                    basepoints[0] = triggerAmount * damage / 100;
-                    break;
-                }
                 // Sacred Shield (buff)
                 case 58597:
                 {
@@ -2615,17 +2576,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                     target = this;
                     break;
                 }
-                // Glyph of Healing Wave
-                case 55440:
-                {
-                    // Not proc from self heals
-                    if (this == pVictim)
-                        return SPELL_AURA_PROC_FAILED;
-                    basepoints[0] = triggerAmount * damage / 100;
-                    target = this;
-                    triggered_spell_id = 55533;
-                    break;
-                }
                 // Spirit Hunt
                 case 58877:
                 {
@@ -2635,34 +2585,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
                         return SPELL_AURA_PROC_FAILED;
                     basepoints[0] = triggerAmount * damage / 100;
                     triggered_spell_id = 58879;
-                    break;
-                }
-                // Glyph of Totem of Wrath
-                case 63280:
-                {
-                    Totem* totem = GetTotem(TOTEM_SLOT_FIRE);
-                    if (!totem)
-                        return SPELL_AURA_PROC_FAILED;
-
-                    // find totem aura bonus
-                    AuraList const& spellPower = totem->GetAurasByType(SPELL_AURA_NONE);
-                    for (auto i : spellPower)
-                    {
-                        // select proper aura for format aura type in spell proto
-                        if (i->GetTarget() == totem && i->GetSpellProto()->EffectApplyAuraName[i->GetEffIndex()] == SPELL_AURA_MOD_HEALING_DONE &&
-                            i->GetSpellProto()->SpellFamilyName == SPELLFAMILY_SHAMAN && i->GetSpellProto()->SpellFamilyFlags & uint64(0x0000000004000000))
-                        {
-                            basepoints[0] = triggerAmount * i->GetModifier()->m_amount / 100;
-                            break;
-                        }
-                    }
-
-                    if (!basepoints[0])
-                        return SPELL_AURA_PROC_FAILED;
-
-                    basepoints[1] = basepoints[0];
-                    triggered_spell_id = 63283;             // Totem of Wrath, caster bonus
-                    target = this;
                     break;
                 }
                 // Item - Shaman T8 Elemental 4P Bonus
@@ -3936,7 +3858,7 @@ SpellAuraProcResult Unit::HandleProcTriggerDamageAuraProc(ProcExecutionData& dat
         triggeredByAura->GetHolder()->SetProcCooldown(std::chrono::seconds(cooldown), GetMap()->GetCurrentClockTime());
 
     SpellNonMeleeDamage spellDamageInfo(this, victim, spellInfo->Id, SpellSchoolMask(spellInfo->SchoolMask));
-    CalculateSpellDamage(&spellDamageInfo, triggeredByAura->GetModifier()->m_amount, spellInfo);
+    CalculateSpellDamage(&spellDamageInfo, triggeredByAura->GetModifier()->m_amount, spellInfo, triggeredByAura->GetEffIndex());
     spellDamageInfo.target->CalculateAbsorbResistBlock(this, &spellDamageInfo, spellInfo);
     Unit::DealDamageMods(this, spellDamageInfo.target, spellDamageInfo.damage, &spellDamageInfo.absorb, SPELL_DIRECT_DAMAGE);
     SendSpellNonMeleeDamageLog(&spellDamageInfo);
@@ -4262,7 +4184,7 @@ SpellAuraProcResult Unit::HandleAddFlatModifierAuraProc(ProcExecutionData& data)
         CastCustomSpell(pVictim, 68055, &bp, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, triggeredByAura);
     }
 
-    return SPELL_AURA_PROC_OK;
+    return SPELL_AURA_PROC_CANT_TRIGGER;
 }
 
 SpellAuraProcResult Unit::HandleAddPctModifierAuraProc(ProcExecutionData& data)
@@ -4288,27 +4210,8 @@ SpellAuraProcResult Unit::HandleAddPctModifierAuraProc(ProcExecutionData& data)
             }
             break;
         }
-        case SPELLFAMILY_PALADIN:
-        {
-            // Glyph of Divinity
-            if (spellProto->Id == 54939)
-            {
-                // Lookup base amount mana restore
-                for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
-                {
-                    if (spellProto->Effect[i] == SPELL_EFFECT_ENERGIZE)
-                    {
-                        int32 mana = spellProto->CalculateSimpleValue(SpellEffectIndex(i));
-                        CastCustomSpell(this, 54986, nullptr, &mana, nullptr, TRIGGERED_OLD_TRIGGERED, castItem, triggeredByAura);
-                        break;
-                    }
-                }
-                return SPELL_AURA_PROC_OK;
-            }
-            break;
-        }
     }
-    return SPELL_AURA_PROC_OK;
+    return SPELL_AURA_PROC_CANT_TRIGGER;
 }
 
 SpellAuraProcResult Unit::HandleModDamagePercentDoneAuraProc(ProcExecutionData& data)

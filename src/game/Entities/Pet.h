@@ -23,6 +23,7 @@
 #include "Entities/ObjectGuid.h"
 #include "Entities/Creature.h"
 #include "Entities/Unit.h"
+#include "Maps/InstanceData.h"
 
 enum PetType
 {
@@ -173,7 +174,7 @@ class Pet : public Creature
         void SetDeathState(DeathState s) override;          // overwrite virtual Creature::SetDeathState and Unit::SetDeathState
         void Update(const uint32 diff) override;  // overwrite virtual Creature::Update and Unit::Update
 
-        uint8 GetPetAutoSpellSize() const { return m_autospells.size(); }
+        uint8 GetPetAutoSpellSize() const override { return m_autospells.size(); }
         uint32 GetPetAutoSpellOnPos(uint8 pos) const override
         {
             if (pos >= m_autospells.size())
@@ -181,7 +182,7 @@ class Pet : public Creature
             return m_autospells[pos];
         }
 
-        bool CanSwim() const
+        bool CanSwim() const override
         {
             if (HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
                 return true;
@@ -204,13 +205,10 @@ class Pet : public Creature
         uint32 GetDuration() const override { return uint32(m_duration); }
 
         bool UpdateStats(Stats stat) override;
-        bool UpdateAllStats() override;
-        void UpdateResistances(uint32 school) override;
-        void UpdateArmor() override;
         void UpdateMaxHealth() override;
         void UpdateMaxPower(Powers power) override;
         void UpdateAttackPowerAndDamage(bool ranged = false) override;
-        void UpdateDamagePhysical(WeaponAttackType attType) override;
+        float GetConditionalTotalPhysicalDamageModifier(WeaponAttackType type) const override;
 
         bool CanTakeMoreActiveSpells(uint32 spellid);
         void ToggleAutocast(uint32 spellid, bool apply);
@@ -264,7 +262,7 @@ class Pet : public Creature
         uint32  m_usedTalentCount;
 
         // overwrite Creature function for name localization back to WorldObject version without localization
-        const char* GetNameForLocaleIdx(int32 locale_idx) const { return WorldObject::GetNameForLocaleIdx(locale_idx); }
+        const char* GetNameForLocaleIdx(int32 locale_idx) const override { return WorldObject::GetNameForLocaleIdx(locale_idx); }
 
         DeclinedName const* GetDeclinedNames() const { return m_declinedname; }
 
@@ -301,7 +299,9 @@ class Pet : public Creature
 
         bool IgnoresOwnersDeath() const;
 
-        std::vector<uint32> GetCharmSpells() const;
+        std::vector<uint32> GetCharmSpells() const override;
+
+        void Heartbeat() override;
     protected:
         uint32  m_happinessTimer;
         PetType m_petType;
@@ -318,6 +318,7 @@ class Pet : public Creature
         bool m_controllableGuardian;
         bool m_doNotFollowMounted;
         bool m_saveAutocast;
+        bool m_glyphedStat;
 
         void SaveToDB(uint32, uint8, uint32) override       // overwrite of Creature::SaveToDB     - don't must be called
         {

@@ -73,7 +73,7 @@ struct boss_skeramAI : public CombatAI
         AddCombatAction(SKERAM_ARCANE_EXPLOSION, 6000, 12000);
         AddCombatAction(SKERAM_TRUE_FULFILMENT, uint32(15) * IN_MILLISECONDS);
         AddCombatAction(SKERAM_EARTH_SHOCK, 1200u);
-        AddCustomAction(SKERAM_BLINK_DELAY, true, [&]() { HandleBlinkDelay(); });
+        AddCustomAction(SKERAM_BLINK_DELAY, true, [&]() { HandleBlinkDelay(); }, TIMER_COMBAT_COMBAT);
         AddOnKillText(SAY_SLAY);
     }
 
@@ -362,7 +362,7 @@ struct InitializeImage : public SpellScript
         }
     }
 
-    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex eff) const
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex eff) const override
     {
         if (target->GetSpawnerGuid()) // only original spawn can be hit by this
             return false;

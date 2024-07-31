@@ -18,7 +18,7 @@
 
 #include "AuctionHouseBot.h"
 #include "Globals/ObjectMgr.h"
-#include "Log.h"
+#include "Log/Log.h"
 #include "Policies/Singleton.h"
 #include "Util/ProgressBar.h"
 #include "SystemConfig.h"
@@ -40,7 +40,7 @@ AuctionHouseBot::~AuctionHouseBot()
 
 void AuctionHouseBot::Initialize()
 {
-    if (!m_ahBotCfg.SetSource(m_configFileName))
+    if (!m_ahBotCfg.SetSource(m_configFileName, "Mangosd_"))
     {
         // set buy/sell chance to 0, this prevents Update() from accessing uninitialized variables
         m_chanceBuy = 0;
@@ -473,7 +473,7 @@ void AuctionHouseBot::AddLootToItemMap(LootStore* store, std::vector<int32>& loo
             continue;
         std::unique_ptr<Loot> loot = std::make_unique<Loot>(LOOT_DEBUG);
         for (uint32 repeat = urand(lootConfig[2], lootConfig[3]); repeat > 0; --repeat)
-            lootTable->Process(*loot, nullptr, *store, store->IsRatesAllowed());
+            lootTable->Process(*loot, nullptr, store->IsRatesAllowed());
 
         LootItem* lootItem;
         for (uint32 slot = 0; (lootItem = loot->GetLootItemInSlot(slot)); ++slot)

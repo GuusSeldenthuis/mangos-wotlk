@@ -233,7 +233,7 @@ struct boss_alarAI : public CombatAI
         if (m_creature->HasAura(SPELL_EMBER_BLAST))
             return;
 
-        ScriptedAI::EnterEvadeMode();
+        CombatAI::EnterEvadeMode();
     }
 
     void ReceiveAIEvent(AIEventType eventType, Unit* /*sender*/, Unit* invoker, uint32 /*miscValue*/) override
@@ -462,7 +462,7 @@ struct boss_alarAI : public CombatAI
         ResetCombatAction(ALAR_CHARGE, urand(25000, 30000));
     }
 
-    void ExecuteAction(uint32 action)
+    void ExecuteAction(uint32 action) override
     {
         switch (action)
         {

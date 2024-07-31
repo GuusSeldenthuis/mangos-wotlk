@@ -86,7 +86,7 @@ struct boss_twin_emperorsAI : public CombatAI
     {
         AddCombatAction(EMPEROR_BERSERK, 15u * MINUTE * IN_MILLISECONDS);
         AddCombatAction(EMPEROR_BUG_ABILITY, urand(7000, 14000));
-        AddCustomAction(EMPEROR_TELEPORT_DELAY, true, [&]() { HandleDelayedAttack(); });
+        AddCustomAction(EMPEROR_TELEPORT_DELAY, true, [&]() { HandleDelayedAttack(); }, TIMER_COMBAT_COMBAT);
     }
 
     instance_temple_of_ahnqiraj* m_instance;
@@ -236,12 +236,12 @@ struct boss_veknilashAI : public boss_twin_emperorsAI
         DoScriptText(SAY_VEKNILASH_DEATH, m_creature);
     }
 
-    bool DoHandleBugAbility()
+    bool DoHandleBugAbility() override
     {
         return DoCastSpellIfCan(nullptr, SPELL_MUTATE_BUG) == CAST_OK;
     }
 
-    bool DoHandleBerserk()
+    bool DoHandleBerserk() override
     {
         return DoCastSpellIfCan(nullptr, SPELL_BERSERK) == CAST_OK;
     }
@@ -359,7 +359,7 @@ struct boss_veklorAI : public boss_twin_emperorsAI
         return DoCastSpellIfCan(nullptr, SPELL_EXPLODE_BUG) == CAST_OK;
     }
 
-    bool DoHandleBerserk()
+    bool DoHandleBerserk() override
     {
         return DoCastSpellIfCan(nullptr, SPELL_FRENZY) == CAST_OK;
     }

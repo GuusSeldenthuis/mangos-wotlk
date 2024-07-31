@@ -54,6 +54,7 @@ enum
     // RP scripts
     NPC_BARTOLO                     = 20365,
     NPC_BEGGAR                      = 20432,
+    NPC_COMMANDER_MOGRAINE          = 20345,
 };
 
 static const float afInstanceLoc[][4] =
@@ -77,7 +78,7 @@ class instance_old_hillsbrad : public ScriptedInstance
         void OnObjectCreate(GameObject* pGo) override;
 
         void OnCreatureEnterCombat(Creature* pCreature) override;
-        void OnCreatureEvade(Creature* pCreature);
+        void OnCreatureEvade(Creature* pCreature) override;
         void OnCreatureDeath(Creature* pCreature) override;
 
         void SetData(uint32 uiType, uint32 uiData) override;

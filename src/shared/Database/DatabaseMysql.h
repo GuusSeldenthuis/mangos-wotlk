@@ -17,6 +17,7 @@
  */
 
 #ifndef DO_POSTGRESQL
+#ifndef DO_SQLITE
 
 #ifndef _DATABASEMYSQL_H
 #define _DATABASEMYSQL_H
@@ -73,7 +74,7 @@ class MySQLConnection : public SqlConnection
         QueryNamedResult* QueryNamed(const char* sql) override;
         bool Execute(const char* sql) override;
 
-        unsigned long escape_string(char* to, const char* from, unsigned long length);
+        unsigned long escape_string(char* to, const char* from, unsigned long length) override;
 
         bool BeginTransaction() override;
         bool CommitTransaction() override;
@@ -109,5 +110,6 @@ class DatabaseMysql : public Database
         static size_t db_count;
 };
 
+#endif
 #endif
 #endif

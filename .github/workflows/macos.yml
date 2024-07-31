@@ -8,20 +8,20 @@ env:
   REPO_DIR : ${{github.workspace}}
   BUILD_DIR: ${{github.workspace}}/bin/builddir
   BOOST_VERSION: "1.83.0"
-  BOOST_PLATFORM_VERSION: "11"
+  BOOST_PLATFORM_VERSION: "12"
 
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: macos-11
+    runs-on: macos-12
     permissions:
       contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ${{env.REPO_DIR}}
 
@@ -32,7 +32,7 @@ jobs:
           echo "OPENSSL_ROOT_DIR=$(brew --prefix --installed openssl)" >> $GITHUB_ENV
 
       - name: Install Boost
-        uses: MarkusJx/install-boost@v2.4.4
+        uses: MarkusJx/install-boost@v2.4.5
         id: install-boost
         with:
           # REQUIRED: Specify the required boost version
@@ -72,7 +72,7 @@ jobs:
           echo "GIT_SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
 
       - name: Notify
-        uses: rjstone/discord-webhook-notify@v1.0.4
+        uses: rjstone/discord-webhook-notify@v1.1.1
         with:
           severity: error
           description: |

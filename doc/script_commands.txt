@@ -245,6 +245,7 @@ Defining a buddy could be done in several way:
                                             * datalong = spell id
                                             * datalong2 = TriggerCastFlags
                                             * dataint1-dataint4 optional. If some of these are set to a spell id, a random spell out of datalong, datint1, ..,dataintX is cast.
+                                            * data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL: do not pass target to spellcast
 
 16 SCRIPT_COMMAND_PLAY_SOUND                source = any object, target=any/player
                                             * datalong = sound_id
@@ -258,7 +259,7 @@ Defining a buddy could be done in several way:
                                             * datalong2 = amount
                                             * data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL: remove the item from player by the given amount
 
-18 SCRIPT_COMMAND_DESPAWN_SELF              resultingSource = Creature
+18 SCRIPT_COMMAND_DESPAWN_SELF              resultingTarget = Creature
                                             * datalong = despawn delay
 
 19 SCRIPT_COMMAND_PLAY_MOVIE                target can only be a player
@@ -444,4 +445,9 @@ Defining a buddy could be done in several way:
 55 SCRIPT_COMMAND_SET_STRING_ID             Sets or removes a string_id from a WorldObject
                                             * datalong = string_id id
                                             * apply = 0 remove, 1 add
+
+56 SCRIPT_COMMAND_RECALL_OR_RESPAWN_ACCESSORIES Recalls or respawns source vehicle accessories
+                                            * datalong = 0x1 recall, 0x2 respawn, 0x3 recall and respawn
+                                            * datalong2 = max distance for recall, of 0 any distance
+                                            * dataint = seat index for recall or respawn, if -1, all seats per vehicle accessory template
 

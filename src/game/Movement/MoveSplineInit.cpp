@@ -20,7 +20,7 @@
 #include "MoveSpline.h"
 #include "packet_builder.h"
 #include "Entities/Unit.h"
-#include "Log.h"
+#include "Log/Log.h"
 #include "Maps/TransportSystem.h"
 #include "Entities/Transports.h"
 
@@ -217,8 +217,8 @@ namespace Movement
     MoveSplineInit::MoveSplineInit(Unit& m) : unit(m)
     {
         // mix existing state into new
-        args.flags.walkmode = unit.m_movementInfo.HasMovementFlag(MOVEFLAG_WALK_MODE);
-        args.flags.flying = unit.m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_CAN_FLY | MOVEFLAG_HOVER | MOVEFLAG_FLYING | MOVEFLAG_LEVITATING));
+        args.flags.walkmode = unit.m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_WALK_MODE | MOVEFLAG_HOVER));
+        args.flags.flying = unit.m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_CAN_FLY | MOVEFLAG_FLYING | MOVEFLAG_LEVITATING));
     }
 
     void MoveSplineInit::SetFacing(const WorldObject* target)

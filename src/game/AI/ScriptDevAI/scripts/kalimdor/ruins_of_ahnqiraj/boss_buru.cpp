@@ -75,7 +75,7 @@ struct boss_buruAI : public CombatAI
         AddCombatAction(BURU_CREEPING_PLAGUE, true);
         AddCombatAction(BURU_GATHERING_SPEED, 9000u);
         AddCombatAction(BURU_FULL_SPEED, 60000u);
-        AddCustomAction(BURU_PHASE_2_TRANSITION_STEP, true, [&]() { HandlePhaseTwo(); });
+        AddCustomAction(BURU_PHASE_2_TRANSITION_STEP, true, [&]() { HandlePhaseTwo(); }, TIMER_COMBAT_COMBAT);
     }
 
     uint8 m_uiPhase;
@@ -276,7 +276,7 @@ struct npc_buru_eggAI : public Scripted_NoMovementAI
         }
     }
 
-    void SpellHit(Unit* /*caster*/, const SpellEntry* spellInfo)
+    void SpellHit(Unit* /*caster*/, const SpellEntry* spellInfo) override
     {
         if (spellInfo->Id == SPELL_BURU_TRANSFORM)
         {

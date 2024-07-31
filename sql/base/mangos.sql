@@ -24,7 +24,7 @@ CREATE TABLE `db_version` (
   `version` varchar(120) DEFAULT NULL,
   `creature_ai_version` varchar(120) DEFAULT NULL,
   `cache_id` int(10) DEFAULT '0',
-  `required_14080_01_mangos_pursuit` bit(1) DEFAULT NULL
+  `required_14086_01_mangos_displayid_probability` bit(1) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Used DB version notes';
 
 --
@@ -972,10 +972,10 @@ CREATE TABLE `creature` (
   `map` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'Map Identifier',
   `spawnMask` tinyint(3) unsigned NOT NULL DEFAULT '1',
   `phaseMask` smallint(5) unsigned NOT NULL DEFAULT '1',
-  `position_x` float NOT NULL DEFAULT '0',
-  `position_y` float NOT NULL DEFAULT '0',
-  `position_z` float NOT NULL DEFAULT '0',
-  `orientation` float NOT NULL DEFAULT '0',
+  `position_x` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `position_y` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `position_z` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `orientation` DECIMAL(40,20) NOT NULL DEFAULT '0',
   `spawntimesecsmin` int(10) unsigned NOT NULL DEFAULT '120' COMMENT 'Creature respawn time minimum',
   `spawntimesecsmax` int(10) unsigned NOT NULL DEFAULT '120' COMMENT 'Creature respawn time maximum',
   `spawndist` float NOT NULL DEFAULT '5',
@@ -1502,10 +1502,14 @@ CREATE TABLE `creature_template` (
   `DifficultyEntry1` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `DifficultyEntry2` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `DifficultyEntry3` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `ModelId1` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `ModelId2` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `ModelId3` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `ModelId4` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `DisplayId1` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `DisplayId2` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `DisplayId3` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `DisplayId4` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `DisplayIdProbability1` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `DisplayIdProbability2` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `DisplayIdProbability3` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `DisplayIdProbability4` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   `Faction` smallint(5) unsigned NOT NULL DEFAULT '0',
   `Scale` float NOT NULL DEFAULT '1',
   `Family` tinyint(4) NOT NULL DEFAULT '0',
@@ -1540,6 +1544,11 @@ CREATE TABLE `creature_template` (
   `DamageVariance` float NOT NULL DEFAULT '1',
   `ArmorMultiplier` float NOT NULL DEFAULT '1',
   `ExperienceMultiplier` float NOT NULL DEFAULT '1',
+  `StrengthMultiplier` float NOT NULL DEFAULT '1',
+  `AgilityMultiplier` float NOT NULL DEFAULT '1',
+  `StaminaMultiplier` float NOT NULL DEFAULT '1',
+  `IntellectMultiplier` float NOT NULL DEFAULT '1',
+  `SpiritMultiplier` float NOT NULL DEFAULT '1',
   `MinLevelHealth` int(10) unsigned NOT NULL DEFAULT '0',
   `MaxLevelHealth` int(10) unsigned NOT NULL DEFAULT '0',
   `MinLevelMana` int(10) unsigned NOT NULL DEFAULT '0',
@@ -1590,6 +1599,7 @@ CREATE TABLE `creature_template` (
   `InteractionPauseTimer` INT(10) NOT NULL DEFAULT -1,
   `CorpseDecay` INT UNSIGNED NOT NULL DEFAULT '0' COMMENT 'Time before corpse despawns',
   `SpellList` INT NOT NULL DEFAULT '0' COMMENT 'creature_spell_list_entry',
+  `CharmedSpellList` INT NOT NULL DEFAULT '0' COMMENT 'creature_spell_list_entry during charm',
   `StringId1` INT(11) UNSIGNED NOT NULL DEFAULT '0',
   `StringId2` INT(11) UNSIGNED NOT NULL DEFAULT '0',
   `AIName` char(64) NOT NULL DEFAULT '',
@@ -1604,7 +1614,7 @@ CREATE TABLE `creature_template` (
 LOCK TABLES `creature_template` WRITE;
 /*!40000 ALTER TABLE `creature_template` DISABLE KEYS */;
 INSERT INTO `creature_template` VALUES
-(1,'Waypoint (Only GM can see it)','Visual',NULL,1,1,0,0,0,10045,0,0,0,35,1,0,8,7,1,0,0,4096,0,0,130,5242886,0,0,0,0,0.91,1.14286,1,20,0,0,0,0,8,0,-1,1,1,1,1,1,1,64,64,0,0,2,3,1,2,5,10,100,2000,2200,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'','');
+(1,'Waypoint (Only GM can see it)','Visual',NULL,1,1,0,0,0,10045,0,0,0,100,0,0,0,35,1,0,8,7,1,0,0,4096,0,0,130,5242886,0,0,0,0,0.91,1.14286,1,20,0,0,0,0,8,0,-1,1,1,1,1,1,1,1,1,1,1,1,64,64,0,0,2,3,1,2,5,10,100,2000,2200,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'','');
 /*!40000 ALTER TABLE `creature_template` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2219,14 +2229,14 @@ CREATE TABLE `gameobject` (
   `map` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'Map Identifier',
   `spawnMask` tinyint(3) unsigned NOT NULL DEFAULT '1',
   `phaseMask` smallint(5) unsigned NOT NULL DEFAULT '1',
-  `position_x` float NOT NULL DEFAULT '0',
-  `position_y` float NOT NULL DEFAULT '0',
-  `position_z` float NOT NULL DEFAULT '0',
-  `orientation` float NOT NULL DEFAULT '0',
-  `rotation0` float NOT NULL DEFAULT '0',
-  `rotation1` float NOT NULL DEFAULT '0',
-  `rotation2` float NOT NULL DEFAULT '0',
-  `rotation3` float NOT NULL DEFAULT '0',
+  `position_x` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `position_y` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `position_z` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `orientation` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `rotation0` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `rotation1` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `rotation2` DECIMAL(40,20) NOT NULL DEFAULT '0',
+  `rotation3` DECIMAL(40,20) NOT NULL DEFAULT '0',
   `spawntimesecsmin` int(11) NOT NULL DEFAULT '0' COMMENT 'GameObject respawn time minimum',
   `spawntimesecsmax` int(11) NOT NULL DEFAULT '0' COMMENT 'Gameobject respawn time maximum',
   PRIMARY KEY (`guid`),
@@ -4774,7 +4784,7 @@ INSERT INTO `mangos_string` VALUES
 (514,'%d - |cffffffff|Hcreature_entry:%d|h[%s]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (515,'%d%s - |cffffffff|Hcreature:%d|h[%s X:%f Y:%f Z:%f MapId:%d]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (516,'%d - |cffffffff|Hgameobject_entry:%d|h[%s]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-(517,'%d%s, Entry %d - |cffffffff|Hgameobject:%d|h[%s X:%f Y:%f Z:%f MapId:%d]SpawnGroup:%u|h|r',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
+(517,'%d%s, Entry %d - |cffffffff|Hgameobject:%d:%d|h[%s X:%f Y:%f Z:%f MapId:%d]|h|r SpawnGroup:%u',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (518,'%d - |cffffffff|Hitemset:%d|h[%s %s]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (519,'|cffffffff|Htele:%s|h[%s]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (520,'%d - |cffffffff|Hspell:%d|h[%s]|h|r ',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),

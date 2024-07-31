@@ -24,7 +24,7 @@
 #include "MotionGenerators/MovementGenerator.h"
 #include "Spells/SpellAuras.h"
 #include "Util/ProgressBar.h"
-#include "Log.h"
+#include "Log/Log.h"
 
 std::shared_ptr<std::map<int32, UnitConditionEntry>> UnitConditionMgr::Load()
 {
@@ -262,6 +262,7 @@ int32 UnitConditionMgr::getConditionValue(Unit const* source, Unit const* target
         case UnitCondition::PATH_FAIL_COUNT: return source->GetMotionMaster()->GetCurrent()->IsReachable(); // TODO: Workaround
         case UnitCondition::UNUSED: break;
         case UnitCondition::LABEL: break;
+        default: break;
     }
     return false;
 }
