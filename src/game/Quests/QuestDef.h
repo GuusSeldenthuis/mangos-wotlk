@@ -22,6 +22,7 @@
 #include "Platform/Define.h"
 #include "Database/DatabaseEnv.h"
 #include "Server/DBCEnums.h"
+#include "Util/UniqueTrackablePtr.h"
 
 #include <vector>
 
@@ -256,6 +257,9 @@ class Quest
         uint32 GetRewHonorAddition() const { return RewHonorAddition; }
         float GetRewHonorMultiplier() const { return RewHonorMultiplier; }
         uint32 GetRewMoneyMaxLevel() const;
+        int32 GetRewArenaPoints() const { return RewArenaPoints; }
+        uint32 GetRewFactionFlags() const { return RewFactionFlags; }
+        uint32 GetRewUnkField() const { return RewUnkField; }
         // use in XP calculation at client
         uint32 GetRewSpell() const { return RewSpell; }
         uint32 GetRewSpellCast() const { return RewSpellCast; }
@@ -318,6 +322,8 @@ class Quest
         uint32 GetReqCreatureOrGOcount() const { return m_reqCreatureOrGOcount; }
         uint32 GetRewChoiceItemsCount() const { return m_rewchoiceitemscount; }
         uint32 GetRewItemsCount() const { return m_rewitemscount; }
+
+        MaNGOS::unique_weak_ptr<Quest> GetWeakPtr() const { return m_weakRef; }
 
         typedef std::vector<int32> PrevQuests;
         PrevQuests prevQuests;
@@ -382,6 +388,9 @@ class Quest
         float RewHonorMultiplier;
         int32  RewOrReqMoney;
         uint32 RewMoneyMaxLevel;
+        int32 RewArenaPoints;
+        uint32 RewFactionFlags;
+        uint32 RewUnkField;
         uint32 RewSpell;
         uint32 RewSpellCast;
         uint32 RewMailTemplateId;
@@ -396,6 +405,8 @@ class Quest
         uint32 CompleteEmoteDelay;
         uint32 QuestStartScript;
         uint32 QuestCompleteScript;
+
+        MaNGOS::unique_weak_ptr<Quest> m_weakRef;
 };
 
 enum QuestUpdateState

@@ -2044,12 +2044,9 @@ void PlayerbotAI::HandleBotOutgoingPacket(const WorldPacket& packet)
         // Handle Group invites (auto accept if master is in group, otherwise decline & send message
         case SMSG_GROUP_INVITE:
         {
-            if (m_bot->GetGroupInvite())
+            const Group* const grp = m_bot->GetGroupInvite();
+            if (grp)
             {
-                const Group* const grp = m_bot->GetGroupInvite();
-                if (!grp)
-                    return;
-
                 Player* const inviter = sObjectMgr.GetPlayer(grp->GetLeaderGuid());
                 if (!inviter)
                     return;
@@ -2210,7 +2207,7 @@ void PlayerbotAI::HandleBotOutgoingPacket(const WorldPacket& packet)
                 uint32 copper = m_bot->GetMoney();
                 out.str("");
                 out << "I have |cff00ff00" << Cash(copper) << "|r";
-                SendWhisper(out.str().c_str(), *(m_bot->GetTrader()));
+                SendWhisper(out.str(), *(m_bot->GetTrader()));
             }
             return;
         }
@@ -5191,7 +5188,7 @@ void PlayerbotAI::UpdateAI(const uint32 /*p_time*/)
             return;
 
         if (m_bot->GetPetGuid() || spell->CheckCast(true) != SPELL_CAST_OK || !pTarget ||
-                pTarget->IsDead() || !m_bot->IsInMap(pTarget) || !(((Creature*) pTarget)->GetCreatureInfo()->CreatureTypeFlags & CREATURE_TYPEFLAGS_TAMEABLE))
+                pTarget->IsDead() || !m_bot->IsInMap(pTarget) || !(((Creature*) pTarget)->GetCreatureInfo()->HasFlag(CreatureTypeFlags::TAMEABLE)))
         {
             MovementReset();
             m_bot->SetSelectionGuid(ObjectGuid());
@@ -11479,7 +11476,7 @@ void PlayerbotAI::_HandleCommandSurvey(std::string& /*text*/, Player& fromPlayer
         while (queryResult->NextRow());
 
     }
-    SendWhisper(detectout.str().c_str(), fromPlayer);
+    SendWhisper(detectout.str(), fromPlayer);
 }
 
 // _HandleCommandSkill: Handle class & professions training:

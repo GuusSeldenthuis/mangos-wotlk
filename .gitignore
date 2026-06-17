@@ -22,6 +22,7 @@
 #
 bin
 build
+build_linux
 tags
 TAGS
 win
@@ -91,3 +92,8 @@ cmake_install.cmake
 # recastnavigation directory needs exception
 !dep/recastnavigation/RecastDemo/Build/
 /_build/
+
+#
+# Module files
+#
+src/modules/

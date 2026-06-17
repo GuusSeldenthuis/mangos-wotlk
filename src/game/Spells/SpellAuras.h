@@ -22,6 +22,7 @@
 #include "Server/DBCEnums.h"
 #include "Entities/ObjectGuid.h"
 #include "Spells/Scripts/SpellScript.h"
+#include "Util/UniqueTrackablePtr.h"
 
 /**
  * Used to modify what an Aura does to a player/npc.
@@ -101,7 +102,7 @@ class SpellAuraHolder
         void ApplyAuraModifiers(bool apply, bool real = false);
         void _AddSpellAuraHolder();
         void _RemoveSpellAuraHolder();
-        void BuildUpdatePacket(WorldPacket& data) const;
+        void BuildUpdatePacket(ByteBuffer& data) const;
         void SendAuraUpdate(bool remove) const;
         void HandleSpellSpecificBoosts(bool apply);
         void CleanupTriggeredSpells();
@@ -200,6 +201,8 @@ class SpellAuraHolder
         bool HasMechanic(uint32 mechanic) const;
         bool HasMechanicMask(uint32 mechanicMask) const;
         bool IsDispellableByMask(uint32 dispelMask, Unit const* caster, SpellEntry const* spellInfo) const;
+
+        bool HasPeriodicAura() const;
 
         void SetCreationDelayFlag();
 
@@ -569,6 +572,9 @@ class Aura
         void ForcePeriodicity(uint32 periodicTime);
         void SetAffectOverriden() { m_affectOverriden = true; } // spell script must implement condition
 
+        MaNGOS::unique_weak_ptr<Aura> GetWeakPtr() const { return m_scriptRef; }
+        void InvalidateScriptRef() { m_scriptRef = nullptr; }
+
     protected:
         Aura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster = nullptr, Item* castItem = nullptr);
 
@@ -610,6 +616,9 @@ class Aura
         uint64 m_scriptValue; // persistent value for spell script state
         ScriptStorage* m_storage;
         bool m_affectOverriden;
+
+        struct NoopAuraDeleter { void operator()(Aura*) const { /*noop - not managed*/ } };
+        MaNGOS::unique_trackable_ptr<Aura> m_scriptRef;
     private:
         void ReapplyAffectedPassiveAuras(Unit* target, bool owner_mode);
 };
@@ -618,7 +627,7 @@ class AreaAura : public Aura
 {
     public:
         AreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster = nullptr, Item* castItem = nullptr, uint32 originalRankSpellId = 0);
-        virtual ~AreaAura();
+        virtual ~AreaAura() override;
 
         bool OnAreaAuraCheckTarget(Unit* target) const;
     protected:
@@ -633,7 +642,7 @@ class PersistentAreaAura : public Aura
 {
     public:
         PersistentAreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster = nullptr, Item* castItem = nullptr);
-        virtual ~PersistentAreaAura();
+        virtual ~PersistentAreaAura() override;
     protected:
         void Update(uint32 diff) override;
 };
@@ -643,7 +652,7 @@ class GameObjectAura : public Aura
 {
     public:
         GameObjectAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, GameObject* caster);
-        virtual ~GameObjectAura();
+        virtual ~GameObjectAura() override;
 
     protected:
         void Update(uint32 diff) override;

@@ -56,8 +56,7 @@ enum PatchwerkActions
 
 struct boss_patchwerkAI : public BossAI
 {
-    boss_patchwerkAI(Creature* creature) : BossAI(creature, PATCHWERK_ACTION_MAX),
-        m_instance(static_cast<ScriptedInstance*>(creature->GetInstanceData()))
+    boss_patchwerkAI(Creature* creature) : BossAI(creature, PATCHWERK_ACTION_MAX), m_instance(static_cast<ScriptedInstance*>(creature->GetInstanceData()))
     {
         SetDataType(TYPE_PATCHWERK);
         AddOnKillText(SAY_SLAY);
@@ -71,7 +70,7 @@ struct boss_patchwerkAI : public BossAI
 
     void Reset() override
     {
-        CombatAI::Reset();
+        BossAI::Reset();
         m_creature->SetSpellList(SPELLSET_NORMAL);
     }
 
@@ -98,6 +97,7 @@ struct boss_patchwerkAI : public BossAI
     }
 };
 
+// 28307 - Hateful Strike Primer
 struct HatefulStrikePrimer : public SpellScript
 {
     void OnInit(Spell* spell) const override
@@ -124,9 +124,10 @@ struct HatefulStrikePrimer : public SpellScript
         {
             if (Unit* caster = spell->GetCaster())
             {
+                bool regularMode = caster->GetMap()->IsRegularDifficulty();
                 // Target is filtered in Spell::FilterTargetMap
                 if (Unit* unitTarget = spell->GetUnitTarget())
-                    caster->CastSpell(unitTarget, SPELL_HATEFULSTRIKE, TRIGGERED_NONE);
+                    caster->CastSpell(unitTarget, regularMode ? SPELL_HATEFULSTRIKE : SPELL_HATEFULSTRIKE_H, TRIGGERED_NONE);
             }
         }
     }

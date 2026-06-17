@@ -45,6 +45,11 @@
 #include "PlayerBot/Base/PlayerbotMgr.h"
 #endif
 
+#ifdef ENABLE_PLAYERBOTS
+#include "playerbot/playerbot.h"
+#include "playerbot/PlayerbotAIConfig.h"
+#endif
+
 // config option SkipCinematics supported values
 enum CinematicsSkipMode
 {
@@ -65,6 +70,108 @@ class LoginQueryHolder : public SqlQueryHolder
         uint32 GetAccountId() const { return m_accountId; }
         bool Initialize();
 };
+
+#ifdef ENABLE_PLAYERBOTS
+class PlayerbotLoginQueryHolder : public LoginQueryHolder
+{
+private:
+    uint32 masterAccountId;
+    PlayerbotHolder* playerbotHolder;
+
+public:
+    PlayerbotLoginQueryHolder(PlayerbotHolder* playerbotHolder, uint32 masterAccount, uint32 accountId, uint32 guid)
+        : LoginQueryHolder(accountId, ObjectGuid(HIGHGUID_PLAYER, guid)), masterAccountId(masterAccount), playerbotHolder(playerbotHolder) { }
+
+public:
+    uint32 GetMasterAccountId() const { return masterAccountId; }
+    PlayerbotHolder* GetPlayerbotHolder() { return playerbotHolder; }
+};
+
+void PlayerbotHolder::AddPlayerBot(uint32 playerGuid, uint32 masterAccount)
+{
+    // has bot already been added?
+    ObjectGuid guid = ObjectGuid(HIGHGUID_PLAYER, playerGuid);
+    Player* bot = sObjectMgr.GetPlayer(guid);
+
+    if (bot && bot->IsInWorld())
+        return;
+
+    uint32 accountId = sObjectMgr.GetPlayerAccountIdByGUID(guid);
+    if (accountId == 0)
+        return;
+
+    PlayerbotLoginQueryHolder* holder = new PlayerbotLoginQueryHolder(this, masterAccount, accountId, playerGuid);
+    if (!holder->Initialize())
+    {
+        delete holder;                                      // delete all unprocessed queries
+        return;
+    }
+
+    CharacterDatabase.DelayQueryHolder(this, &PlayerbotHolder::HandlePlayerBotLoginCallback, holder);
+}
+
+void PlayerbotHolder::HandlePlayerBotLoginCallback(QueryResult* dummy, SqlQueryHolder* holder)
+{
+    if (!holder)
+        return;
+
+    PlayerbotLoginQueryHolder* lqh = (PlayerbotLoginQueryHolder*)holder;
+    uint32 masterAccount = lqh->GetMasterAccountId();
+
+    WorldSession* masterSession = masterAccount ? sWorld.FindSession(masterAccount) : NULL;
+    uint32 botAccountId = lqh->GetAccountId();
+    WorldSession* botSession = new WorldSession(botAccountId, NULL, SEC_PLAYER, 2, 0, LOCALE_enUS, "", 0, 0, false);
+    botSession->SetNoAnticheat();
+
+    // has bot already been added?
+    if (sObjectMgr.GetPlayer(lqh->GetGuid(), false))
+        return;
+
+    uint32 guid = lqh->GetGuid().GetRawValue();
+
+    botSession->HandlePlayerLogin(lqh); // will delete lqh
+
+    Player* bot = botSession->GetPlayer();
+    if (!bot)
+    {
+        sLog.outError("Error logging in bot %d, please try to reset all random bots", guid);
+        return;
+    }
+
+    bot->RemovePlayerbotMgr();
+
+    sRandomPlayerbotMgr.OnPlayerLogin(bot);
+
+    bool allowed = false;
+    if (botAccountId == masterAccount)
+    {
+        allowed = true;
+    }
+    else if (masterSession && sPlayerbotAIConfig.allowGuildBots && bot->GetGuildId() == masterSession->GetPlayer()->GetGuildId())
+    {
+        allowed = true;
+    }
+    else if (sPlayerbotAIConfig.IsInRandomAccountList(botAccountId))
+    {
+        allowed = true;
+    }
+
+    if (allowed)
+    {
+        OnBotLogin(bot);
+        return;
+    }
+
+    if (masterSession)
+    {
+        ChatHandler ch(masterSession);
+        ch.PSendSysMessage("You are not allowed to control bot %s", bot->GetName());
+    }
+
+    LogoutPlayerBot(bot->GetObjectGuid());
+    sLog.outError("Attempt to add not allowed bot %s, please try to reset all random bots", bot->GetName());
+}
+#endif
 
 bool LoginQueryHolder::Initialize()
 {
@@ -100,7 +207,7 @@ bool LoginQueryHolder::Initialize()
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADGUILD,           "SELECT guildid, `rank` FROM guild_member WHERE guid = '%u'", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADARENAINFO,       "SELECT arenateamid, played_week, played_season, wons_season, personal_rating FROM arena_team_member WHERE guid='%u'", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADACHIEVEMENTS,    "SELECT achievement, date FROM character_achievement WHERE guid = '%u'", m_guid.GetCounter());
-    res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADCRITERIAPROGRESS, "SELECT criteria, counter, date FROM character_achievement_progress WHERE guid = '%u'", m_guid.GetCounter());
+    res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADCRITERIAPROGRESS, "SELECT criteria, counter, date, failed FROM character_achievement_progress WHERE guid = '%u'", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADEQUIPMENTSETS,   "SELECT setguid, setindex, name, iconname, ignore_mask, item0, item1, item2, item3, item4, item5, item6, item7, item8, item9, item10, item11, item12, item13, item14, item15, item16, item17, item18 FROM character_equipmentsets WHERE guid = '%u' ORDER BY setindex", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADBGDATA,          "SELECT instance_id, team, join_x, join_y, join_z, join_o, join_map, mount_spell FROM character_battleground_data WHERE guid = '%u'", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADACCOUNTDATA,     "SELECT type, time, data FROM character_account_data WHERE guid='%u'", m_guid.GetCounter());
@@ -135,8 +242,28 @@ class CharacterHandler
         {
             if (!holder) return;
 
+#ifdef ENABLE_PLAYERBOTS
+            WorldSession* session = sWorld.FindSession(((LoginQueryHolder*)holder)->GetAccountId());
+            if (!session)
+            {
+                delete holder;
+                return;
+            }
+
+            ObjectGuid guid = ((LoginQueryHolder*)holder)->GetGuid();
+            session->HandlePlayerLogin((LoginQueryHolder*)holder);
+
+            Player* player = session->GetPlayer();
+            if (player)
+            {
+                player->CreatePlayerbotMgr();
+                player->GetPlayerbotMgr()->OnPlayerLogin(player);
+                sRandomPlayerbotMgr.OnPlayerLogin(player);
+            }
+#else
             if (WorldSession* session = sWorld.FindSession(((LoginQueryHolder*)holder)->GetAccountId()))
                 session->HandlePlayerLogin((LoginQueryHolder*)holder);
+#endif
         }
 #ifdef BUILD_DEPRECATED_PLAYERBOT
         // This callback is different from the normal HandlePlayerLoginCallback in that it
@@ -597,6 +724,36 @@ void WorldSession::HandlePlayerLoginOpcode(WorldPacket& recv_data)
         return;
     }
 
+#ifdef ENABLE_PLAYERBOTS
+    if (pCurrChar && pCurrChar->GetPlayerbotAI())
+    {
+        WorldSession* botSession = pCurrChar->GetSession();
+        SetPlayer(pCurrChar, playerGuid);
+        _player->SetSession(this);
+        _logoutTime = time(0);
+
+        m_sessionDbcLocale = botSession->m_sessionDbcLocale;
+        m_sessionDbLocaleIndex = botSession->m_sessionDbLocaleIndex;
+
+        PlayerbotMgr* mgr = _player->GetPlayerbotMgr();
+        if (!mgr || mgr->GetMaster() != _player)
+        {
+            _player->RemovePlayerbotMgr();
+            _player->CreatePlayerbotMgr();
+            _player->GetPlayerbotMgr()->OnPlayerLogin(_player);
+
+            if (sRandomPlayerbotMgr.GetPlayerBot(playerGuid))
+            {
+                sRandomPlayerbotMgr.MovePlayerBot(playerGuid, _player->GetPlayerbotMgr());
+            }
+            else
+            {
+                _player->GetPlayerbotMgr()->OnBotLogin(_player);
+            }
+        }
+    }
+#endif
+
     if (_player)
     {
         // player is reconnecting
@@ -826,7 +983,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
         group->SendUpdateTo(pCurrChar);
 
 
-    pCurrChar->SendInitialPacketsAfterAddToMap();
+    pCurrChar->SendInitialPacketsAfterAddToMap(false);
 
     static SqlStatementID updChars;
     static SqlStatementID updAccount;
@@ -944,6 +1101,9 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
 
 void WorldSession::HandlePlayerReconnect()
 {
+    // Detect if reconnecting in combat
+    const bool inCombat = _player->IsInCombat();
+
     // stop logout timer if need
     LogoutRequest(0);
 
@@ -1033,14 +1193,7 @@ void WorldSession::HandlePlayerReconnect()
     if (group)
         group->SendUpdateTo(_player);
 
-    _player->GetSocial()->SendSocialList();
-    uint32 areaId = 0;
-    uint32 zoneId = 0;
-    _player->GetZoneAndAreaId(zoneId, areaId);
-    _player->SendInitWorldStates(zoneId, areaId);
-    _player->CastSpell(_player, 836, TRIGGERED_OLD_TRIGGERED);       // LOGINEFFECT
-    _player->SendEnchantmentDurations();                             // must be after add to map
-    _player->SendItemDurations();                                    // must be after add to map
+    _player->SendInitialPacketsAfterAddToMap(true);
 
     // Send friend list online status for other players
     sSocialMgr.SendFriendStatus(_player, FRIEND_ONLINE, _player->GetObjectGuid(), true);
@@ -1062,13 +1215,8 @@ void WorldSession::HandlePlayerReconnect()
     sLog.outChar("Account: %d (IP: %s) Login Character:[%s] (guid: %u)",
         GetAccountId(), IP_str.c_str(), _player->GetName(), _player->GetGUIDLow());
 
-    // sync client auras timer
-    _player->UpdateClientAuras();
-
     // sync client control (if taxi flying the client is already sync)
-    if (_player->IsTaxiFlying())
-        _player->TaxiFlightResume(true);
-    else if (!_player->IsClientControlled(_player))
+    if (!_player->IsTaxiFlying() && !_player->IsClientControlled(_player))
         _player->UpdateClientControl(_player, false);
 
     // initialize client pet bar if need
@@ -1081,7 +1229,12 @@ void WorldSession::HandlePlayerReconnect()
         _player->SetStandState(UNIT_STAND_STATE_STAND);
 
     // Undo flags and states set by logout if present:
-    _player->SetStunnedByLogout(false);
+    if (!_player->IsTaxiFlying())
+        _player->SetStunnedByLogout(false);
+
+    // Mark self for unit flags update to ensure re-application of combat flag at own client
+    if (inCombat)
+        _player->ForceValuesUpdateAtIndex(UNIT_FIELD_FLAGS);
 
     m_playerLoading = false;
 }
@@ -1387,6 +1540,8 @@ void WorldSession::HandleAlterAppearanceOpcode(WorldPacket& recv_data)
 
     _player->GetAchievementMgr().UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_VISIT_BARBER_SHOP, 1);
 
+    _player->SendForcedObjectUpdate();
+
     _player->SetStandState(0);                              // stand up
 }
 
@@ -1513,6 +1668,13 @@ void WorldSession::HandleEquipmentSetSaveOpcode(WorldPacket& recv_data)
     recv_data >> name;
     recv_data >> iconName;
 
+    name.erase(std::remove_if(name.begin(), name.end(), [](char c) { return !std::isprint(c); }), name.end());
+    if (name.size() >= 127)
+        name.resize(127);
+    iconName.erase(std::remove_if(iconName.begin(), iconName.end(), [](char c) { return !std::isprint(c); }), iconName.end());
+    if (iconName.size() >= 255)
+        iconName.resize(255);
+
     if (index >= MAX_EQUIPMENT_SET_INDEX)                   // client set slots amount
         return;
 
@@ -1567,6 +1729,10 @@ void WorldSession::HandleEquipmentSetUseOpcode(WorldPacket& recv_data)
     DEBUG_LOG("CMSG_EQUIPMENT_SET_USE");
     recv_data.hexlike();
 
+    bool weaponChanged = false;
+    bool bagsFull = false;
+    bool fail = false;
+
     for (uint32 i = 0; i < EQUIPMENT_SLOT_END; ++i)
     {
         ObjectGuid itemGuid;
@@ -1577,13 +1743,15 @@ void WorldSession::HandleEquipmentSetUseOpcode(WorldPacket& recv_data)
 
         DEBUG_LOG("Item (%s): srcbag %u, srcslot %u", itemGuid.GetString().c_str(), srcbag, srcslot);
 
+        // TODO: Add check against swapping from bank when bank not opened
+
         // check if item slot is set to "ignored" (raw value == 1), must not be unequipped then
         if (itemGuid.GetRawValue() == 1)
             continue;
 
         Item* item = _player->GetItemByGuid(itemGuid);
 
-        uint16 dstpos = i | (INVENTORY_SLOT_BAG_0 << 8);
+        uint16 dest = i | (INVENTORY_SLOT_BAG_0 << 8);
 
         if (!item)
         {
@@ -1592,25 +1760,39 @@ void WorldSession::HandleEquipmentSetUseOpcode(WorldPacket& recv_data)
                 continue;
 
             ItemPosCountVec sDest;
-            InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sDest, uItem, false);
+            uint8 bagSlot = 0;
+            InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sDest, uItem, bagSlot, false);
             if (msg == EQUIP_ERR_OK)
             {
                 _player->RemoveItem(INVENTORY_SLOT_BAG_0, i, true);
                 _player->StoreItem(sDest, uItem, true);
             }
             else
-                _player->SendEquipError(msg, uItem, nullptr);
+            {
+                _player->SendEquipError(msg, uItem, nullptr, bagSlot);
+                if (msg == EQUIP_ERR_BAG_FULL)
+                    bagsFull = true;
+                else
+                    fail = true;
+            }
 
             continue;
         }
 
-        if (item->GetPos() == dstpos)
+        if (item->GetPos() == dest)
             continue;
 
-        _player->SwapItem(item->GetPos(), dstpos);
+        uint8 src = item->GetPos();
+        _player->SwapItem(src, dest);
+
+        if (dest == EQUIPMENT_SLOT_MAINHAND || dest == EQUIPMENT_SLOT_OFFHAND || src == EQUIPMENT_SLOT_MAINHAND || src == EQUIPMENT_SLOT_OFFHAND)
+            weaponChanged = true;
     }
 
     WorldPacket data(SMSG_USE_EQUIPMENT_SET_RESULT, 1);
-    data << uint8(0);                                       // 4 - equipment swap failed - inventory is full
+    data << uint8(bagsFull ? 4 : (fail ? 1 : 0)); // 4 - equipment swap failed - inventory is full, 1 any failure
     SendPacket(data);
+
+    if (weaponChanged)
+        _player->SendResetRangedCombatTimer();
 }

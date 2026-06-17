@@ -27,6 +27,7 @@
 #include "Grids/CellImpl.h"
 #include "Globals/ObjectMgr.h"
 #include "Maps/MapWorkers.h"
+#include "BattleGround/BattleGroundMgr.h"
 #include <future>
 
 #define CLASS_LOCK MaNGOS::ClassLevelLockable<MapManager, std::recursive_mutex>
@@ -34,15 +35,14 @@ INSTANTIATE_SINGLETON_2(MapManager, CLASS_LOCK);
 INSTANTIATE_CLASS_MUTEX(MapManager, std::recursive_mutex);
 
 MapManager::MapManager()
-    : i_gridCleanUpDelay(sWorld.getConfig(CONFIG_UINT32_INTERVAL_GRIDCLEAN))
+    : i_gridCleanUpDelay(sWorld.getConfig(CONFIG_UINT32_INTERVAL_GRIDCLEAN)), m_transportCounter(0)
 {
     i_timer.SetInterval(sWorld.getConfig(CONFIG_UINT32_INTERVAL_MAPUPDATE));
 }
 
 MapManager::~MapManager()
 {
-    for (auto& i_map : i_maps)
-        delete i_map.second;
+    i_maps.clear();
 
     DeleteStateMachine();
 }
@@ -96,7 +96,9 @@ void MapManager::CreateContinents()
     {
         Map* m = new WorldMap(id, i_gridCleanUpDelay, 0);
         // add map into container
-        i_maps[MapID(id)] = m;
+        MaNGOS::unique_trackable_ptr<Map>& ptr = i_maps[MapID(id)];
+        ptr.reset(m);
+        m->SetWeakPtr(ptr);
 
         // non-instanceable maps always expected have saved state
         futures.push_back(std::async(std::launch::async, std::bind(&Map::Initialize, m, true)));
@@ -135,7 +137,9 @@ Map* MapManager::CreateMap(uint32 id, const WorldObject* obj)
             std::lock_guard<std::mutex> lock(m_lock);
             m = new WorldMap(id, i_gridCleanUpDelay, instanceId);
             // add map into container
-            i_maps[MapID(id, instanceId)] = m;
+            MaNGOS::unique_trackable_ptr<Map>& ptr = i_maps[MapID(id, instanceId)];
+            ptr.reset(m);
+            m->SetWeakPtr(ptr);
 
             // non-instanceable maps always expected have saved state
             m->Initialize();
@@ -145,12 +149,12 @@ Map* MapManager::CreateMap(uint32 id, const WorldObject* obj)
     return m;
 }
 
-Map* MapManager::CreateBgMap(uint32 mapid, BattleGround* bg)
+Map* MapManager::CreateBgMap(uint32 mapid, uint32 instanceId, BattleGround* bg)
 {
     sTerrainMgr.LoadTerrain(mapid);
 
     Guard _guard(*this);
-    return CreateBattleGroundMap(mapid, sObjectMgr.GenerateInstanceLowGuid(), bg);
+    return CreateBattleGroundMap(mapid, instanceId, bg);
 }
 
 Map* MapManager::FindMap(uint32 mapid, uint32 instanceId) const
@@ -168,7 +172,7 @@ Map* MapManager::FindMap(uint32 mapid, uint32 instanceId) const
         return nullptr;
     }
 
-    return iter->second;
+    return iter->second.get();
 }
 
 void MapManager::DeleteInstance(uint32 mapid, uint32 instanceId)
@@ -178,13 +182,11 @@ void MapManager::DeleteInstance(uint32 mapid, uint32 instanceId)
     MapMapType::iterator iter = i_maps.find(MapID(mapid, instanceId));
     if (iter != i_maps.end())
     {
-        Map* pMap = iter->second;
-        if (pMap->Instanceable())
+        if (iter->second->Instanceable())
         {
-            i_maps.erase(iter);
+            auto node = i_maps.extract(iter);
 
-            pMap->UnloadAll(true);
-            delete pMap;
+            node.mapped()->UnloadAll(true);
         }
     }
 }
@@ -210,14 +212,12 @@ void MapManager::Update(uint32 diff)
     MapMapType::iterator iter = i_maps.begin();
     while (iter != i_maps.end())
     {
-        Map* pMap = iter->second;
         // check if map can be unloaded
-        if (pMap->CanUnload((uint32)i_timer.GetCurrent()))
+        if (iter->second->CanUnload((uint32)i_timer.GetCurrent()))
         {
-            pMap->UnloadAll(true);
-            delete pMap;
+            auto node = i_maps.extract(iter++);
 
-            i_maps.erase(iter++);
+            node.mapped()->UnloadAll(true);
         }
         else
             ++iter;
@@ -254,11 +254,7 @@ void MapManager::UnloadAll()
     for (auto& i_map : i_maps)
         i_map.second->UnloadAll(true);
 
-    while (!i_maps.empty())
-    {
-        delete i_maps.begin()->second;
-        i_maps.erase(i_maps.begin());
-    }
+    i_maps.clear();
 
     if (m_updater.activated())
         m_updater.deactivate();
@@ -273,7 +269,7 @@ uint32 MapManager::GetNumInstances()
     uint32 ret = 0;
     for (auto& i_map : i_maps)
     {
-        Map* map = i_map.second;
+        Map* map = i_map.second.get();
         if (!map->IsDungeon()) continue;
         ret += 1;
     }
@@ -286,7 +282,7 @@ uint32 MapManager::GetNumPlayersInInstances()
     uint32 ret = 0;
     for (auto& i_map : i_maps)
     {
-        Map* map = i_map.second;
+        Map* map = i_map.second.get();
         if (!map->IsDungeon()) continue;
         ret += map->GetPlayers().getSize();
     }
@@ -337,7 +333,9 @@ Map* MapManager::CreateInstance(uint32 id, Player* player)
     // add a new map object into the registry
     if (pNewMap)
     {
-        i_maps[MapID(id, NewInstanceId)] = pNewMap;
+        MaNGOS::unique_trackable_ptr<Map>& ptr = i_maps[MapID(id, NewInstanceId)];
+        ptr.reset(pNewMap);
+        pNewMap->SetWeakPtr(ptr);
         map = pNewMap;
     }
 
@@ -384,13 +382,14 @@ BattleGroundMap* MapManager::CreateBattleGroundMap(uint32 id, uint32 InstanceId,
 
     uint8 spawnMode = bracketEntry ? bracketEntry->difficulty : uint8(REGULAR_DIFFICULTY);
 
-    BattleGroundMap* map = new BattleGroundMap(id, i_gridCleanUpDelay, InstanceId, spawnMode);
+    BattleGroundMap* map = new BattleGroundMap(id, i_gridCleanUpDelay, InstanceId, spawnMode, bg);
     MANGOS_ASSERT(map->IsBattleGroundOrArena());
-    map->SetBG(bg);
     bg->SetBgMap(map);
 
     // add map into map container
-    i_maps[MapID(id, InstanceId)] = map;
+    MaNGOS::unique_trackable_ptr<Map>& ptr = i_maps[MapID(id, InstanceId)];
+    ptr.reset(map);
+    map->SetWeakPtr(ptr);
 
     // BGs/Arenas not have saved instance data
     map->Initialize(false);
@@ -398,16 +397,16 @@ BattleGroundMap* MapManager::CreateBattleGroundMap(uint32 id, uint32 InstanceId,
     return map;
 }
 
-void MapManager::DoForAllMapsWithMapId(uint32 mapId, std::function<void(Map*)> worker)
+void MapManager::DoForAllMapsWithMapId(uint32 mapId, const std::function<void(Map*)> worker)
 {
     MapMapType::const_iterator start = i_maps.lower_bound(MapID(mapId, 0));
     MapMapType::const_iterator end = i_maps.lower_bound(MapID(mapId + 1, 0));
     for (MapMapType::const_iterator itr = start; itr != end; ++itr)
-        worker(itr->second);
+        worker(itr->second.get());
 }
 
 void MapManager::DoForAllMaps(const std::function<void(Map*)>& worker)
 {
     for (MapMapType::const_iterator itr = i_maps.begin(); itr != i_maps.end(); ++itr)
-        worker(itr->second);
+        worker(itr->second.get());
 }

@@ -60,14 +60,19 @@ class SpawnGroup
 
         void RespawnIfInVicinity(Position pos, float range);
 
+        bool IsRespawnOverriden() const;
+        uint32 GetRandomRespawnTime() const;
+
     protected:
         SpawnGroupEntry const& m_entry;
         Map& m_map;
         std::map<uint32, uint32> m_objects;
         std::map<uint32, uint32> m_chosenEntries; // dungeon saving for entry per dynguid
         std::map<uint32, bool> m_chosenSpawns;
+        int32 m_chosenSquad;
         uint32 m_objectTypeId;
         bool m_enabled;
+        TimePoint m_cooldown; // used for full wipe scenario only - data is still saved per spawn to db
 };
 
 class CreatureGroup : public SpawnGroup
@@ -77,9 +82,9 @@ class CreatureGroup : public SpawnGroup
         void RemoveObject(WorldObject* wo) override;
         void TriggerLinkingEvent(uint32 event, Unit* target);
 
-        void SetFormationData(FormationEntrySPtr fEntry);
+        void SetFormationData(FormationEntry const& fEntry);
+        void ClearFormationData();
         FormationData* GetFormationData() { return m_formationData.get(); }
-        FormationEntrySPtr GetFormationEntry() const { return m_entry.formationEntry; }
 
         virtual void Update() override;
 
@@ -100,6 +105,7 @@ class CreatureGroup : public SpawnGroup
     private:
         void ClearRespawnTimes();
         FormationDataSPtr m_formationData;
+        std::set<Unit*> m_linkageTargets;
 };
 
 struct RespawnPosition
@@ -188,7 +194,7 @@ class FormationSlotData
 class FormationData
 {
     public:
-        FormationData(CreatureGroup* gData, FormationEntrySPtr fEntry);
+        FormationData(CreatureGroup* gData, FormationEntry const& fEntry);
         FormationData() = delete;
         ~FormationData();
 
@@ -217,7 +223,7 @@ class FormationData
         FormationSlotDataSPtr SetFormationSlot(Creature* creature, SpawnGroupFormationSlotType slotType = SPAWN_GROUP_FORMATION_SLOT_TYPE_STATIC);
         std::string to_string() const;
 
-        FormationEntrySPtr GetFormationEntry() const { return m_fEntry; }
+        FormationEntry const& GetFormationEntry() const { return m_formationEntry; }
         void SetMovementInfo(MovementGeneratorType moveType, uint32 pahtId);
 
         void ResetLastWP() { m_lastWP = 0; }
@@ -241,7 +247,7 @@ class FormationData
         bool HaveOption(SpawGroupFormationOptions const& option) const { return (static_cast<uint32>(m_currentOptions) & option) != 0; }
 
         CreatureGroup* m_groupData;
-        FormationEntrySPtr m_fEntry;
+        FormationEntry m_formationEntry;
         SpawnGroupFormationType m_currentFormationShape;
         FormationSlotMap m_slotsMap;
         MovementGeneratorType m_masterMotionType;

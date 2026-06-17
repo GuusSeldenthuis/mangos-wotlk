@@ -854,7 +854,7 @@ void MapPersistentStateManager::PackInstances() const
     BarGoLink bar(InstanceSet.size() + 1);
     bar.step();
 
-    uint32 InstanceNumber = 1;
+    uint32 InstanceNumber = 2; //Reserve instance id 1 for ebonhold GetTeam() == ALLIANCE.
     // we do assume std::set is sorted properly on integer value
     for (uint32 i : InstanceSet)
     {
@@ -1213,7 +1213,7 @@ time_t MapPersistentStateManager::GetSubsequentResetTime(uint32 mapid, Difficult
     }
 
     time_t resetHour = sWorld.getConfig(CONFIG_UINT32_INSTANCE_RESET_TIME_HOUR);
-    time_t period = uint32(((mapDiff->resetTime * sWorld.getConfig(CONFIG_FLOAT_RATE_INSTANCE_RESET_TIME)) / DAY) * DAY);
+    time_t period = time_t(((mapDiff->resetTime * sWorld.getConfig(CONFIG_FLOAT_RATE_INSTANCE_RESET_TIME)) / static_cast<float>(DAY)) * static_cast<float>(DAY));
     if (period < DAY)
         period = DAY;
 

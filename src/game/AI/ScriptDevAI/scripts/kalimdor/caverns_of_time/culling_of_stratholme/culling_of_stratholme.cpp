@@ -208,28 +208,36 @@ enum
     SPELL_CRATES_KILL_CREDIT    = 58109,
 };
 
-bool EffectAuraDummy_spell_aura_dummy_npc_crates_dummy(const Aura* pAura, bool bApply)
+// 49590 - Arcane Disruption
+struct ArcaneDisruption : public AuraScript
 {
-    if (pAura->GetId() == SPELL_ARCANE_DISRUPTION && pAura->GetEffIndex() == EFFECT_INDEX_0 && bApply)
+    void OnApply(Aura* aura, bool apply) const override
     {
-        if (Creature* pTarget = (Creature*)pAura->GetTarget())
+        if (!apply)
+            return;
+
+        Unit* target = aura->GetTarget();
+        if (!target->IsCreature())
+            return;
+
+        if (Creature* creature = static_cast<Creature*>(target))
         {
-            if (pTarget->GetEntry() != NPC_GRAIN_CRATE_HELPER)
-                return true;
+            if (creature->GetEntry() != NPC_GRAIN_CRATE_HELPER)
+                return;
 
             CreatureList lCrateBunnyList;
-            if (instance_culling_of_stratholme* pInstance = (instance_culling_of_stratholme*)pTarget->GetInstanceData())
+            if (instance_culling_of_stratholme* pInstance = dynamic_cast<instance_culling_of_stratholme*>(creature->GetInstanceData()))
             {
                 pInstance->GetCratesBunnyOrderedList(lCrateBunnyList);
                 uint8 i = 0;
                 for (CreatureList::const_iterator itr = lCrateBunnyList.begin(); itr != lCrateBunnyList.end(); ++itr)
                 {
                     ++i;
-                    if (*itr == pTarget)
+                    if (*itr == creature)
                     {
                         // check if the event can proceed
-                        if (!pInstance->CanGrainEventProgress(pTarget))
-                            return true;
+                        if (!pInstance->CanGrainEventProgress(creature))
+                            return;
 
                         break;
                     }
@@ -257,7 +265,7 @@ bool EffectAuraDummy_spell_aura_dummy_npc_crates_dummy(const Aura* pAura, bool b
                         break;
                     case 4:
                         // Start NPC_MALCOM_MOORE Event
-                        pTarget->SummonCreature(NPC_MALCOM_MOORE, 1605.452f, 804.9279f, 122.961f, 5.19f, TEMPSPAWN_DEAD_DESPAWN, 0);
+                        creature->SummonCreature(NPC_MALCOM_MOORE, 1605.452f, 804.9279f, 122.961f, 5.19f, TEMPSPAWN_DEAD_DESPAWN, 0);
                         break;
                     case 5:
                         // Start NPC_BARTLEBY_BATTSON Event
@@ -269,16 +277,16 @@ bool EffectAuraDummy_spell_aura_dummy_npc_crates_dummy(const Aura* pAura, bool b
                 // Finished event, give killcredit
                 if (pInstance->GetData(TYPE_GRAIN_EVENT) == DONE)
                 {
-                    pTarget->CastSpell(pTarget, SPELL_CRATES_KILL_CREDIT, TRIGGERED_OLD_TRIGGERED);
+                    creature->CastSpell(creature, SPELL_CRATES_KILL_CREDIT, TRIGGERED_OLD_TRIGGERED);
                     pInstance->DoOrSimulateScriptTextForThisInstance(SAY_SOLDIERS_REPORT, NPC_LORDAERON_CRIER);
                 }
 
                 // despawn the GO visuals and spanw the plague crate
-                if (GameObject* pCrate = GetClosestGameObjectWithEntry(pTarget, GO_SUSPICIOUS_GRAIN_CRATE, 5.0f))
+                if (GameObject* pCrate = GetClosestGameObjectWithEntry(creature, GO_SUSPICIOUS_GRAIN_CRATE, 5.0f))
                     pCrate->SetLootState(GO_JUST_DEACTIVATED);
-                if (GameObject* pHighlight = GetClosestGameObjectWithEntry(pTarget, GO_CRATE_HIGHLIGHT, 5.0f))
+                if (GameObject* pHighlight = GetClosestGameObjectWithEntry(creature, GO_CRATE_HIGHLIGHT, 5.0f))
                     pHighlight->SetLootState(GO_JUST_DEACTIVATED);
-                if (GameObject* pCrate = GetClosestGameObjectWithEntry(pTarget, GO_PLAGUE_GRAIN_CRATE, 5.0f))
+                if (GameObject* pCrate = GetClosestGameObjectWithEntry(creature, GO_PLAGUE_GRAIN_CRATE, 5.0f))
                 {
                     pCrate->SetRespawnTime(6 * HOUR * IN_MILLISECONDS);
                     pCrate->Refresh();
@@ -286,8 +294,7 @@ bool EffectAuraDummy_spell_aura_dummy_npc_crates_dummy(const Aura* pAura, bool b
             }
         }
     }
-    return true;
-}
+};
 
 /* *************
 ** npc_arthas
@@ -962,24 +969,23 @@ bool GossipSelect_npc_arthas(Player* pPlayer, Creature* pCreature, uint32 /*send
     return true;
 }
 
-/* *************
-** npc_spell_dummy_crusader_strike
-************* */
-
-bool EffectDummyCreature_npc_spell_dummy_crusader_strike(Unit* /*pCaster*/, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 50773 - Crusader Strike
+struct CrusaderStrikeCoS : public SpellScript
 {
-    // always check spellid and effectindex
-    if (uiSpellId == SPELL_CRUSADER_STRIKE && uiEffIndex == EFFECT_INDEX_0)
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
     {
-        // only apply this for certain citizens
-        if (pCreatureTarget->GetEntry() == NPC_STRATHOLME_RESIDENT || pCreatureTarget->GetEntry() == NPC_STRATHOLME_CITIZEN)
-            pCreatureTarget->Suicide();
-        // always return true when we are handling this spell and effect
-        return true;
+        Unit* target = spell->m_targets.getUnitTarget();
+        std::vector<uint32> targets = {NPC_STRATHOLME_RESIDENT, NPC_STRATHOLME_CITIZEN};
+        if (!target || std::find(targets.begin(), targets.end(), target->GetEntry()) == targets.end())
+            return SPELL_FAILED_BAD_TARGETS;
+        return SPELL_CAST_OK;
     }
 
-    return false;
-}
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        spell->GetUnitTarget()->Suicide();
+    }
+};
 
 void AddSC_culling_of_stratholme()
 {
@@ -991,19 +997,12 @@ void AddSC_culling_of_stratholme()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
-    pNewScript->Name = "spell_dummy_npc_crates_bunny";
-    pNewScript->pEffectAuraDummy = &EffectAuraDummy_spell_aura_dummy_npc_crates_dummy;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
     pNewScript->Name = "npc_arthas";
     pNewScript->GetAI = &GetAI_npc_arthas;
     pNewScript->pGossipHello = &GossipHello_npc_arthas;
     pNewScript->pGossipSelect = &GossipSelect_npc_arthas;
     pNewScript->RegisterSelf();
 
-    pNewScript = new Script;
-    pNewScript->Name = "npc_spell_dummy_crusader_strike";
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_spell_dummy_crusader_strike;
-    pNewScript->RegisterSelf();
+    RegisterSpellScript<ArcaneDisruption>("spell_arcane_disruption");
+    RegisterSpellScript<CrusaderStrikeCoS>("spell_crusader_strike_cos");
 }

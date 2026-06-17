@@ -102,6 +102,8 @@ void PointMovementGenerator::Move(Unit& unit)
         init.SetFly();
     if (m_o != 0.f)
         init.SetFacing(m_o);
+    if (m_animTier)
+        init.SetAnimation(*m_animTier, 0);
     init.SetVelocity(m_speed);
     init.Launch();
 }
@@ -116,7 +118,7 @@ void PointMovementGenerator::MovementInform(Unit& unit)
     if (unit.GetTypeId() == TYPEID_UNIT && static_cast<Creature&>(unit).IsTemporarySummon())
     {
         if (unit.GetSpawnerGuid().IsAnyTypeCreature())
-            if (Creature* pSummoner = unit.GetMap()->GetCreature(unit.GetSpawnerGuid()))
+            if (Creature* pSummoner = unit.GetMap()->GetAnyTypeCreature(unit.GetSpawnerGuid()))
             {
                 if (UnitAI* ai = pSummoner->AI())
                     ai->SummonedMovementInform(static_cast<Creature*>(&unit), type, m_id);
@@ -225,7 +227,7 @@ void PointTOLMovementGenerator::Move(Unit& unit)
         init.SetFacing(m_o);
     init.SetVelocity(m_speed);
     init.SetFly();
-    init.SetAnimation((m_takeOff ? Movement::FlyToGround : Movement::ToGround));
+    init.SetAnimation((m_takeOff ? AnimTier::Fly : AnimTier::Ground), 0);
     init.SetWalk(!unit.hasUnitState(UNIT_STAT_RUNNING));
     init.Launch();
 }

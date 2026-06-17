@@ -356,7 +356,7 @@ void BattleGroundAV::StartingEventOpenDoors()
     OpenDoorEvent(BG_EVENT_DOOR);
 
     // Players that join battleground after start are not available to get achievement.
-    StartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_WIN_BG, BG_AV_TIMED_ACHIEV_ALTERAC_BLITZ);
+    GetBgMap()->StartEventForAllPlayersInMap(BG_AV_TIMED_ACHIEV_ALTERAC_BLITZ, nullptr);
 }
 
 void BattleGroundAV::AddPlayer(Player* player)
@@ -435,8 +435,8 @@ void BattleGroundAV::EndBattleGround(Team winner)
     // both teams get honor for completing the BG
     if (m_honorMapComplete)
     {
-        RewardHonorToTeam(m_honorMapComplete, ALLIANCE);
-        RewardHonorToTeam(m_honorMapComplete, HORDE);
+        RewardHonorToTeam(GetBonusHonorFromKill(m_honorMapComplete), ALLIANCE);
+        RewardHonorToTeam(GetBonusHonorFromKill(m_honorMapComplete), HORDE);
     }
 
     BattleGround::EndBattleGround(winner);
@@ -535,7 +535,7 @@ void BattleGroundAV::ProcessPlayerDestroyedPoint(AVNodeIds node)
         SpawnEvent(BG_AV_MARSHAL_A_SOUTH + tmp, 0, false);
 
         UpdateScore(GetOtherTeamIndex(ownerTeamIdx), (-1) * BG_AV_RES_TOWER);
-        RewardReputationToTeam((ownerTeam == ALLIANCE) ? BG_AV_FACTION_ID_STORMPIKE : BG_AV_FACTION_ID_STORMPIKE, m_repTowerDestruction, ownerTeam);
+        RewardReputationToTeam((ownerTeam == ALLIANCE) ? BG_AV_FACTION_ID_STORMPIKE : BG_AV_FACTION_ID_FROSTWOLF, m_repTowerDestruction, ownerTeam);
         RewardHonorToTeam(GetBonusHonorFromKill(BG_AV_KILL_TOWER), ownerTeam);
 
         DoSendYellToTeam(ownerTeamIdx, LANG_BG_AV_TOWER_TAKEN, node);
@@ -578,8 +578,8 @@ void BattleGroundAV::ChangeMineOwner(AVMineIds mineId, PvpTeamIndex newOwnerTeam
     m_mineOwner[mineId] = newOwnerTeamIdx;
     GetBgMap()->GetVariableManager().SetVariable(avMineWorldStates[mineId][m_mineOwner[mineId]], WORLD_STATE_ADD);
 
-    SpawnEvent(BG_AV_MINE_EVENT + mineId, newOwnerTeamIdx, true);
-    SpawnEvent(BG_AV_MINE_BOSSES + mineId, newOwnerTeamIdx, true);
+    SpawnEvent(static_cast<uint8>(BG_AV_MINE_EVENT) + static_cast<uint8>(mineId), newOwnerTeamIdx, true);
+    SpawnEvent(static_cast<uint8>(BG_AV_MINE_BOSSES) + static_cast<uint8>(mineId), newOwnerTeamIdx, true);
 
     if (newOwnerTeamIdx == TEAM_INDEX_NEUTRAL)
         return;
@@ -635,11 +635,11 @@ void BattleGroundAV::PopulateNode(AVNodeIds node)
             graveDefenderType = 3;
 
         if (m_nodes[node].state == POINT_CONTROLLED) // we can spawn the current owner event
-            SpawnEvent(BG_AV_MAX_NODES + node, teamIdx * BG_AV_MAX_GRAVETYPES + graveDefenderType, true);
+            SpawnEvent(static_cast<uint8>(BG_AV_MAX_NODES) + static_cast<uint8>(node), static_cast<uint8>(teamIdx) * static_cast<uint8>(BG_AV_MAX_GRAVETYPES) + graveDefenderType, true);
         else // we despawn the event from the prevowner
-            SpawnEvent(BG_AV_MAX_NODES + node, m_nodes[node].prevOwner * BG_AV_MAX_GRAVETYPES + graveDefenderType, false);
+            SpawnEvent(static_cast<uint8>(BG_AV_MAX_NODES) + static_cast<uint8>(node), static_cast<uint8>(m_nodes[node].prevOwner) * static_cast<uint8>(BG_AV_MAX_GRAVETYPES) + graveDefenderType, false);
     }
-    SpawnEvent(node, (teamIdx * BG_AV_MAX_STATES) + m_nodes[node].state, true);
+    SpawnEvent(node, (static_cast<uint8>(teamIdx) * static_cast<uint8>(BG_AV_MAX_STATES)) + static_cast<uint8>(m_nodes[node].state), true);
 }
 
 // Handle banner click
@@ -650,12 +650,12 @@ void BattleGroundAV::HandlePlayerClickedOnFlag(Player* player, GameObject* go)
 
     DEBUG_LOG("BattleGroundAV: Player from team %u clicked on gameobject entry %u", player->GetTeam(), go->GetEntry());
 
-    uint8 event = (sBattleGroundMgr.GetGameObjectEventIndex(go->GetDbGuid())).event1;
+    uint8 event = (GetBgMap()->GetMapDataContainer().GetGameObjectEventIndex(go->GetDbGuid())).event1;
     if (event >= BG_AV_MAX_NODES)                           // not a node
         return;
     AVNodeIds node = AVNodeIds(event);
 
-    switch ((sBattleGroundMgr.GetGameObjectEventIndex(go->GetDbGuid())).event2 % BG_AV_MAX_STATES)
+    switch ((GetBgMap()->GetMapDataContainer().GetGameObjectEventIndex(go->GetDbGuid())).event2 % BG_AV_MAX_STATES)
     {
         case POINT_CONTROLLED:
             ProcessPlayerAssaultsPoint(player, node);
@@ -849,7 +849,7 @@ void BattleGroundAV::InitializeNode(AVNodeIds node)
 
     if (avNodeDefaults[node].graveyardId)                                      // grave-creatures are special cause of a quest
     {
-        m_activeEvents[node + BG_AV_MAX_NODES]  = avNodeDefaults[node].initialOwner * BG_AV_MAX_GRAVETYPES;
+        m_activeEvents[node + BG_AV_MAX_NODES] = static_cast<uint8>(avNodeDefaults[node].initialOwner) * static_cast<uint8>(BG_AV_MAX_GRAVETYPES);
 
         // initialize graveyards
         Team team = TEAM_INVALID;
@@ -1000,8 +1000,6 @@ bool BattleGroundAV::CheckAchievementCriteriaMeet(uint32 criteriaId, Player cons
         case BG_AV_ACHIEV_CRIT_ALL_COUNTS_H1:
         case BG_AV_ACHIEV_CRIT_ALL_COUNTS_H2:
             return m_mineOwner[BG_AV_IRONDEEP_MINE_ID] == TEAM_INDEX_HORDE && m_mineOwner[BG_AV_COLDTOOTH_MINE_ID] == TEAM_INDEX_HORDE;
-        case BG_AV_ACHIEV_CRIT_SICKLY_GAZELLE:
-            return target->GetAreaId() == BG_AV_AREA_ID_FIELD_OF_STRIFE && target->GetTypeId() == TYPEID_PLAYER && target->IsMounted();
         case BG_AV_ACHIEV_CRIT_STORMPIKE_PERF1:
         case BG_AV_ACHIEV_CRIT_STORMPIKE_PERF2:
         case BG_AV_ACHIEV_CRIT_STORMPIKE_PERF3:

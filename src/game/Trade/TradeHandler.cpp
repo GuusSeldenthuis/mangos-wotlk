@@ -45,7 +45,7 @@ void WorldSession::SendTradeStatus(TradeStatusInfo const& info) const
         case TRADE_STATUS_CLOSE_WINDOW:
             data << uint32(info.Result);                    // InventoryResult
             data << uint8(info.IsTargetResult);             // bool isTargetError; used for: EQUIP_ERR_BAG_FULL, EQUIP_ERR_CANT_CARRY_MORE_OF_THIS, EQUIP_ERR_MISSING_REAGENT, EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED
-            data << uint32(info.ItemLimitCategoryId);       // ItemLimitCategory.dbc entry
+            data << uint32(info.ItemLimitedByLimitCategory);// when result 84 - Item Id that was limited by ItemLimitCategory.dbc
             break;
         case TRADE_STATUS_WRONG_REALM:
         case TRADE_STATUS_NOT_ON_TAPLIST:
@@ -131,8 +131,9 @@ void WorldSession::moveItems(Item* myItems[], Item* hisItems[])
     {
         ItemPosCountVec traderDst;
         ItemPosCountVec playerDst;
-        bool traderCanTrade = (myItems[i] == nullptr || trader->CanStoreItem(NULL_BAG, NULL_SLOT, traderDst, myItems[i], false) == EQUIP_ERR_OK);
-        bool playerCanTrade = (hisItems[i] == nullptr || _player->CanStoreItem(NULL_BAG, NULL_SLOT, playerDst, hisItems[i], false) == EQUIP_ERR_OK);
+        uint8 bagSlot = 0;
+        bool traderCanTrade = (myItems[i] == nullptr || trader->CanStoreItem(NULL_BAG, NULL_SLOT, traderDst, myItems[i], bagSlot, false) == EQUIP_ERR_OK);
+        bool playerCanTrade = (hisItems[i] == nullptr || _player->CanStoreItem(NULL_BAG, NULL_SLOT, playerDst, hisItems[i], bagSlot, false) == EQUIP_ERR_OK);
         if (traderCanTrade && playerCanTrade)
         {
             // Ok, if trade item exists and can be stored
@@ -176,9 +177,10 @@ void WorldSession::moveItems(Item* myItems[], Item* hisItems[])
             // return the already removed items to the original owner
             if (myItems[i])
             {
+                uint8 bagSlot = 0;
                 if (!traderCanTrade)
                     sLog.outError("trader can't store item: %s", myItems[i]->GetGuidStr().c_str());
-                if (_player->CanStoreItem(NULL_BAG, NULL_SLOT, playerDst, myItems[i], false) == EQUIP_ERR_OK)
+                if (_player->CanStoreItem(NULL_BAG, NULL_SLOT, playerDst, myItems[i], bagSlot, false) == EQUIP_ERR_OK)
                     _player->MoveItemToInventory(playerDst, myItems[i], true, true);
                 else
                     sLog.outError("player can't take item back: %s", myItems[i]->GetGuidStr().c_str());
@@ -186,9 +188,10 @@ void WorldSession::moveItems(Item* myItems[], Item* hisItems[])
             // return the already removed items to the original owner
             if (hisItems[i])
             {
+                uint8 bagSlot = 0;
                 if (!playerCanTrade)
                     sLog.outError("player can't store item: %s", hisItems[i]->GetGuidStr().c_str());
-                if (trader->CanStoreItem(NULL_BAG, NULL_SLOT, traderDst, hisItems[i], false) == EQUIP_ERR_OK)
+                if (trader->CanStoreItem(NULL_BAG, NULL_SLOT, traderDst, hisItems[i], bagSlot, false) == EQUIP_ERR_OK)
                     trader->MoveItemToInventory(traderDst, hisItems[i], true, true);
                 else
                     sLog.outError("trader can't take item back: %s", hisItems[i]->GetGuidStr().c_str());
@@ -340,7 +343,7 @@ void WorldSession::HandleAcceptTradeOpcode(WorldPacket& recvPacket)
                 return;
             }
 
-            my_spell = new Spell(_player, spellEntry, TRIGGERED_OLD_TRIGGERED);
+            my_spell = new Spell(_player, spellEntry, TRIGGERED_OLD_TRIGGERED | TRIGGERED_FORCE_COSTS);
             my_spell->SetCastItem(castItem);
             my_targets.setTradeItemTarget(_player);
             my_spell->m_targets = my_targets;
@@ -376,7 +379,7 @@ void WorldSession::HandleAcceptTradeOpcode(WorldPacket& recvPacket)
                 return;
             }
 
-            his_spell = new Spell(trader, spellEntry, TRIGGERED_OLD_TRIGGERED);
+            his_spell = new Spell(trader, spellEntry, TRIGGERED_OLD_TRIGGERED | TRIGGERED_FORCE_COSTS);
             his_spell->SetCastItem(castItem);
             his_targets.setTradeItemTarget(trader);
             his_spell->m_targets = his_targets;
@@ -403,8 +406,8 @@ void WorldSession::HandleAcceptTradeOpcode(WorldPacket& recvPacket)
 
         // test if item will fit in each inventory
         TradeStatusInfo myCanCompleteInfo, hisCanCompleteInfo;
-        hisCanCompleteInfo.Result = trader->CanStoreItems(myItems, TRADE_SLOT_TRADED_COUNT, &hisCanCompleteInfo.ItemLimitCategoryId);
-        myCanCompleteInfo.Result = _player->CanStoreItems(hisItems, TRADE_SLOT_TRADED_COUNT, &myCanCompleteInfo.ItemLimitCategoryId);
+        hisCanCompleteInfo.Result = trader->CanStoreItems(myItems, TRADE_SLOT_TRADED_COUNT, &hisCanCompleteInfo.ItemLimitedByLimitCategory);
+        myCanCompleteInfo.Result = _player->CanStoreItems(hisItems, TRADE_SLOT_TRADED_COUNT, &myCanCompleteInfo.ItemLimitedByLimitCategory);
 
         clearAcceptTradeMode(myItems, hisItems);
 

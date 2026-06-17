@@ -821,7 +821,7 @@ void Guild::Roster(WorldSession* session /*= nullptr*/)
             data << uint8(itr->second.Class);
             data << uint8(itr->second.Gender_);                                 // new 2.4.0
             data << uint32(itr->second.ZoneId);
-            data << float(float(time(nullptr) - itr->second.LogoutTime) / DAY);
+            data << float(float(time(nullptr) - itr->second.LogoutTime) / float(DAY));
             data << itr->second.Pnote;
             data << ((session && HasRankRight(session->GetPlayer()->GetRank(), GR_RIGHT_VIEWOFFNOTE)) ? itr->second.OFFnote : "");
         }
@@ -2130,10 +2130,11 @@ void Guild::MoveFromBankToChar(Player* pl, uint8 BankTab, uint8 BankTabSlot, uin
         }
 
         ItemPosCountVec dest;
-        InventoryResult msg = pl->CanStoreItem(PlayerBag, PlayerSlot, dest, pNewItem, false);
+        uint8 bagSlot = 0;
+        InventoryResult msg = pl->CanStoreItem(PlayerBag, PlayerSlot, dest, pNewItem, bagSlot, false);
         if (msg != EQUIP_ERR_OK)
         {
-            pl->SendEquipError(msg, pNewItem, nullptr);
+            pl->SendEquipError(msg, pNewItem, nullptr, bagSlot);
             delete pNewItem;
             return;
         }
@@ -2161,7 +2162,8 @@ void Guild::MoveFromBankToChar(Player* pl, uint8 BankTab, uint8 BankTabSlot, uin
     else                                                    // Bank -> Char swap with slot (move)
     {
         ItemPosCountVec dest;
-        InventoryResult msg = pl->CanStoreItem(PlayerBag, PlayerSlot, dest, pItemBank, false);
+        uint8 bagSlot = 0;
+        InventoryResult msg = pl->CanStoreItem(PlayerBag, PlayerSlot, dest, pItemBank, bagSlot, false);
         if (msg == EQUIP_ERR_OK)                            // merge case
         {
             // check source pos rights (item moved to inventory)
@@ -2195,10 +2197,10 @@ void Guild::MoveFromBankToChar(Player* pl, uint8 BankTab, uint8 BankTabSlot, uin
             }
 
             ItemPosCountVec iDest;
-            msg = pl->CanStoreItem(PlayerBag, PlayerSlot, iDest, pItemBank, true);
+            msg = pl->CanStoreItem(PlayerBag, PlayerSlot, iDest, pItemBank, bagSlot, true);
             if (msg != EQUIP_ERR_OK)
             {
-                pl->SendEquipError(msg, pItemBank, nullptr);
+                pl->SendEquipError(msg, pItemBank, nullptr, bagSlot);
                 return;
             }
 
@@ -2345,12 +2347,13 @@ void Guild::MoveFromCharToBank(Player* pl, uint8 PlayerBag, uint8 PlayerSlot, ui
         else                                                // Char <-> Bank swap items (posible nullptr bank item)
         {
             ItemPosCountVec iDest;
+            uint8 bagSlot = 0;
             if (pItemBank)
             {
-                msg = pl->CanStoreItem(PlayerBag, PlayerSlot, iDest, pItemBank, true);
+                msg = pl->CanStoreItem(PlayerBag, PlayerSlot, iDest, pItemBank, bagSlot, true);
                 if (msg != EQUIP_ERR_OK)
                 {
-                    pl->SendEquipError(msg, pItemBank, nullptr);
+                    pl->SendEquipError(msg, pItemBank, nullptr, bagSlot);
                     return;
                 }
             }

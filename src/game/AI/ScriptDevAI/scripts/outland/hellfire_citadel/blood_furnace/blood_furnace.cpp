@@ -26,10 +26,10 @@ EndScriptData */
 
 instance_blood_furnace::instance_blood_furnace(Map* map) : ScriptedInstance(map),
     m_uiBroggokEventTimer(90 * IN_MILLISECONDS),
-    m_uiBroggokEventDelay(0),
     m_uiBroggokEventPhase(0),
     m_uiRandYellTimer(90000),
     m_crackTimer(30000),
+    m_uiBroggokEventDelay(0),
     m_uiBroggokEventDelaySpawn(false)
 {
     Initialize();
@@ -370,7 +370,7 @@ void instance_blood_furnace::Update(uint32 uiDiff)
     {
         if (Creature* pMagtheridon = GetSingleCreatureFromStorage(NPC_MAGTHERIDON))
         {
-            DoScriptText(aRandomTaunt[urand(0, 5)], pMagtheridon);
+            DoBroadcastText(aRandomTaunt[urand(0, 5)], pMagtheridon);
             m_uiRandYellTimer = 90000;
         }
     }

@@ -239,12 +239,12 @@ void Unit::UpdateMaxHealth()
     value += GetModifierValue(unitMod, TOTAL_VALUE) + GetHealthBonusFromStamina();
     value *= GetModifierValue(unitMod, TOTAL_PCT);
 
-    SetMaxHealth((uint32)std::max(value, 1.f));
+    SetMaxHealth(uint32(std::round(std::max(value, 1.f))));
 }
 
 void Unit::UpdateMaxPower(Powers power)
 {
-    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + power);
+    UnitMods unitMod = UnitMods(static_cast<uint32>(UNIT_MOD_POWER_START) + static_cast<uint32>(power));
 
     uint32 create_power = GetCreatePowers(power);
 
@@ -256,7 +256,7 @@ void Unit::UpdateMaxPower(Powers power)
     value += GetModifierValue(unitMod, TOTAL_VALUE) +  bonusPower;
     value *= GetModifierValue(unitMod, TOTAL_PCT);
 
-    SetMaxPower(power, uint32(value));
+    SetMaxPower(power, uint32(std::round(value)));
 }
 
 void Player::ApplyFeralAPBonus(int32 amount, bool apply)
@@ -355,7 +355,7 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
     SetModifierValue(unitMod, BASE_VALUE, val2);
 
     float base_attPower  = GetModifierValue(unitMod, BASE_VALUE) * GetModifierValue(unitMod, BASE_PCT);
-    float attPowerMod = GetModifierValue(unitMod, TOTAL_VALUE);
+    float statBonus = 0.f;
 
     // add dynamic flat mods
     if (ranged)
@@ -364,25 +364,25 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
         {
             AuraList const& mRAPbyStat = GetAurasByType(SPELL_AURA_MOD_RANGED_ATTACK_POWER_OF_STAT_PERCENT);
             for (auto i : mRAPbyStat)
-                attPowerMod += int32(GetStat(Stats(i->GetModifier()->m_miscvalue)) * i->GetModifier()->m_amount / 100.0f);
+                statBonus += int32(GetStat(Stats(i->GetModifier()->m_miscvalue)) * i->GetModifier()->m_amount / 100.0f);
         }
     }
     else
     {
         AuraList const& mAPbyStat = GetAurasByType(SPELL_AURA_MOD_ATTACK_POWER_OF_STAT_PERCENT);
         for (auto i : mAPbyStat)
-            attPowerMod += int32(GetStat(Stats(i->GetModifier()->m_miscvalue)) * i->GetModifier()->m_amount / 100.0f);
+            statBonus += int32(GetStat(Stats(i->GetModifier()->m_miscvalue)) * i->GetModifier()->m_amount / 100.0f);
 
         AuraList const& mAPbyArmor = GetAurasByType(SPELL_AURA_MOD_ATTACK_POWER_OF_ARMOR);
         for (auto iter : mAPbyArmor)
             // always: ((*i)->GetModifier()->m_miscvalue == 1 == SPELL_SCHOOL_MASK_NORMAL)
-            attPowerMod += int32(GetArmor() / iter->GetModifier()->m_amount);
+            statBonus += int32(GetArmor() / iter->GetModifier()->m_amount);
     }
 
     float attPowerMultiplier = GetModifierValue(unitMod, TOTAL_PCT) - 1.0f;
 
     SetInt32Value(index, (uint32)base_attPower);            // UNIT_FIELD_(RANGED)_ATTACK_POWER field
-    SetInt16Value(index_mod, 0, m_attackPowerMod[size_t(mod)][size_t(AttackPowerModSign::MOD_SIGN_POS)]);
+    SetInt16Value(index_mod, 0, int32(m_attackPowerMod[size_t(mod)][size_t(AttackPowerModSign::MOD_SIGN_POS)] + statBonus));
     SetInt16Value(index_mod, 1, m_attackPowerMod[size_t(mod)][size_t(AttackPowerModSign::MOD_SIGN_NEG)]);
     SetFloatValue(index_mult, attPowerMultiplier);          // UNIT_FIELD_(RANGED)_ATTACK_POWER_MULTIPLIER field
 
@@ -634,7 +634,7 @@ void Player::UpdateDodgePercentage()
     // Set current dodge chance
     m_modDodgeChance = value;
     // Set value for diminishing when in combat
-    m_modDodgeChanceDiminishing = GetDodgeFromAgility((GetStat(STAT_AGILITY) - (GetCreateStat(STAT_AGILITY) * m_auraModifiersGroup[UNIT_MOD_STAT_START + STAT_AGILITY][BASE_PCT])));
+    m_modDodgeChanceDiminishing = GetDodgeFromAgility((GetStat(STAT_AGILITY) - (GetCreateStat(STAT_AGILITY) * m_auraModifiersGroup[static_cast<uint32>(UNIT_MOD_STAT_START) + static_cast<uint32>(STAT_AGILITY)][BASE_PCT])));
     m_modDodgeChanceDiminishing += GetRatingBonusValue(CR_DODGE);
     // Set UI display value: modify value from defense skill against same level target
     value += (int32(GetDefenseSkillValue()) - int32(GetSkillMaxForLevel())) * 0.04f;
@@ -818,7 +818,8 @@ void Player::UpdateWeaponDependantStats(WeaponAttackType attType)
             break;
         case RANGED_ATTACK:
             UpdateWeaponHitChances(attType);
-            UpdateArmorPenetration();
+            UpdateRangedWeaponDependantAmmoHasteAura();
+			UpdateArmorPenetration();
             break;
     }
 }
@@ -1042,6 +1043,18 @@ float Creature::GetConditionalTotalPhysicalDamageModifier(WeaponAttackType attTy
     return result;
 }
 
+void Creature::UpdateMaxHealth()
+{
+    UnitMods unitMod = UNIT_MOD_HEALTH;
+
+    float value = GetModifierValue(unitMod, BASE_VALUE) + GetCreateHealth();
+    value *= GetModifierValue(unitMod, BASE_PCT) * m_healthMultiplier; // health multiplier affects base health AND stamina increase
+    value += GetModifierValue(unitMod, TOTAL_VALUE) + GetHealthBonusFromStamina() * m_healthMultiplier;
+    value *= GetModifierValue(unitMod, TOTAL_PCT);
+
+    SetMaxHealth(uint32(std::round(std::max(value, 1.f))));
+}
+
 float Creature::GetHealthBonusFromStamina() const
 {
     // only use diff until stamina per level coefficient for npcs is known
@@ -1121,7 +1134,7 @@ void Pet::UpdateMaxPower(Powers power)
         return;
     }
 
-    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + power);
+    UnitMods unitMod = UnitMods(static_cast<uint32>(UNIT_MOD_POWER_START) + static_cast<uint32>(power));
 
     float addValue = (power == POWER_MANA) ? GetStat(STAT_INTELLECT) - GetCreateStat(STAT_INTELLECT) : 0.0f;
 
@@ -1130,7 +1143,7 @@ void Pet::UpdateMaxPower(Powers power)
     value += GetModifierValue(unitMod, TOTAL_VALUE) + std::max((addValue - 20) * 15 + 20, 0.f);
     value *= GetModifierValue(unitMod, TOTAL_PCT);
 
-    SetMaxPower(power, uint32(value));
+    SetMaxPower(power, uint32(std::round(value)));
 }
 
 void Pet::UpdateAttackPowerAndDamage(bool ranged)
@@ -1154,7 +1167,7 @@ void Pet::UpdateAttackPowerAndDamage(bool ranged)
     // in BASE_VALUE of UNIT_MOD_ATTACK_POWER for creatures we store data of meleeattackpower field in DB
     float base_attPower  = GetModifierValue(unitMod, BASE_VALUE) * GetModifierValue(unitMod, BASE_PCT);
     // float attPowerMod = GetModifierValue(unitMod, TOTAL_VALUE);
-    float attPowerMultiplier = GetModifierValue(unitMod, TOTAL_PCT) - 1.0f;
+    float attPowerMultiplier = GetModifierValue(unitMod, TOTAL_PCT);
     if (GetUInt32Value(UNIT_CREATED_BY_SPELL) == 30146 && m_glyphedStat)
         attPowerMultiplier *= 1.2f;
     attPowerMultiplier -= 1.0f;

@@ -40,7 +40,7 @@ namespace Movement
         spline.evaluate_percent(point_Idx, u, c);
 
         if (splineflags.animation)
-            ;// MoveSplineFlag::Animation disables falling or parabolic movement
+            ; // MoveSplineFlag::Animation disables falling or parabolic movement
         else if (splineflags.parabolic)
             computeParabolicElevation(c.z);
         else if (splineflags.falling)
@@ -159,6 +159,7 @@ namespace Movement
         }
         point_Idx = spline.first();
         speed = args.velocity;
+        toggleMoveflagUnk4 = args.toggleMoveflagUnk4;
     }
 
     void MoveSpline::Initialize(const MoveSplineInitArgs& args)
@@ -211,7 +212,10 @@ namespace Movement
 #define CHECK(exp) \
     if (!(exp))\
     {\
-        sLog.outError("MoveSplineInitArgs::Validate: expression '%s' failed for %s", #exp, unit->GetGuidStr().c_str());\
+        if (unit)\
+            sLog.outError("MoveSplineInitArgs::Validate: expression '%s' failed for %s", #exp, unit->GetGuidStr().c_str());\
+        else\
+            sLog.outError("MoveSplineInitArgs::Validate: expression '%s' failed for cyclic spline continuation", #exp);\
         return false;\
     }
         CHECK(path.size() > 1);
@@ -237,7 +241,7 @@ namespace Movement
             for (uint32 i = 1; i < path.size() - 1; ++i)
             {
                 Vector3 offset = path[i] - middle;
-                if (fabs(offset.x / 0.25f) >= MAX_OFFSET || fabs(offset.y / 0.25f) >= MAX_OFFSET || fabs(offset.z / 0.25f) >= MAX_OFFSET)
+                if (fabs(offset.x / 0.25f) >= float(MAX_OFFSET) || fabs(offset.y / 0.25f) >= float(MAX_OFFSET) || fabs(offset.z / 0.25f) >= float(MAX_OFFSET))
                 {
                     sLog.outError("MoveSplineInitArgs::_checkPathBounds check failed");
                     return false;

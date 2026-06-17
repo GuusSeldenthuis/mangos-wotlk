@@ -94,6 +94,15 @@ struct GuardianAggroSpell : public SpellScript
     }
 };
 
+// 33876 - Mangle (Cat)
+struct MangleCat : public SpellScript
+{
+    void OnAfterHit(Spell* spell) const override
+    {
+        spell->GetCaster()->CastSpell(spell->GetUnitTarget(), 34071, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
 struct WildGrowth : public SpellScript
 {
     void OnInit(Spell* spell) const override
@@ -349,7 +358,20 @@ struct ThornsDruid : public AuraScript
     }
 };
 
-// TODO: Glyph of Entangling Roots
+// 33600, 33601, 33602 - Improved Faerie Fire
+struct ImprovedFaerieFire : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (aura->GetEffIndex() == EFFECT_INDEX_0)
+            aura->GetTarget()->RegisterScriptedLocationAura(aura, SCRIPT_LOCATION_CRIT_CHANCE, apply);
+    }
+
+    void OnCritChanceCalculate(Aura* aura, Unit const* target, float& chance, SpellEntry const* /*spellInfo*/) const override
+    {
+        if (target->GetAura(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_DRUID, uint64(0x00000400), 0, aura->GetTarget()->GetObjectGuid())) chance += aura->GetModifier()->m_amount; // Faerie Fire
+    }
+};
 
 void LoadDruidScripts()
 {
@@ -358,6 +380,7 @@ void LoadDruidScripts()
     RegisterSpellScript<ForceOfNatureSummon>("spell_force_of_nature_summon");
     RegisterSpellScript<GuardianAggroSpell>("spell_guardian_aggro_spell");
     RegisterSpellScript<StarfireBonus>("spell_starfire_bonus");
+    RegisterSpellScript<MangleCat>("spell_mangle_cat");
     RegisterSpellScript<WildGrowth>("spell_wild_growth");
     RegisterSpellScript<Brambles>("spell_brambles");
     RegisterSpellScript<ShredDruid>("spell_shred_druid");
@@ -371,4 +394,5 @@ void LoadDruidScripts()
     RegisterSpellScript<GlyphOfTyphoon>("spell_typhoon");
     RegisterSpellScript<GlyphOfStarfire>("spell_glyph_of_starfire");
     RegisterSpellScript<ThornsDruid>("spell_thorns_druid");
+    RegisterSpellScript<ImprovedFaerieFire>("spell_improved_faerie_fire");
 }

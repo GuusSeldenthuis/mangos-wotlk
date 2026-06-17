@@ -73,7 +73,7 @@ const std::string FOURTH_BROGGOK_CELL_STRING = "BF_PRISON_CELL_GROUP_04";
 const std::string FIFTH_BROGGOK_CELL_STRING = "BF_PRISON_CELL_GROUP_05";
 
 // Random Magtheridon taunt
-static const int32 aRandomTaunt[] = { -1544000, -1544001, -1544002, -1544003, -1544004, -1544005};
+static const int32 aRandomTaunt[] = {17339, 17340, 17341, 17342, 17343, 17344};
 
 struct BroggokEventInfo
 {
@@ -125,8 +125,6 @@ class instance_blood_furnace : public ScriptedInstance
         uint32 m_uiBroggokEventDelay;
         bool m_uiBroggokEventDelaySpawn;
         std::vector<uint32> m_broggokEventGuids;
-
-        CreatureGroup* m_cellGroup;
 
         GameObject* m_lLeverGO;
 

@@ -106,7 +106,7 @@ struct mob_mature_netherwing_drakeAI : public ScriptedAI
             m_uiCreditTimer = 7000;
             m_creature->SetLevitate(false);
             m_creature->HandleEmote(EMOTE_ONESHOT_ATTACKUNARMED);
-            m_creature->RemoveByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+            m_creature->SetAnimTier(AnimTier::Ground);
         }
     }
 
@@ -153,7 +153,7 @@ struct mob_mature_netherwing_drakeAI : public ScriptedAI
 
                 Reset();
                 m_creature->SetLevitate(true);
-                m_creature->SetByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+                m_creature->SetAnimTier(AnimTier::Hover);
                 m_creature->GetMotionMaster()->Clear();
                 m_uiCreditTimer = 0;
             }
@@ -446,24 +446,27 @@ struct npc_dragonmaw_peonAI : public ScriptedAI
     }
 };
 
-bool EffectDummyCreature_npc_dragonmaw_peon(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 40468 - Serving Poisoned Mutton
+struct ServingPoisonedMutton : public SpellScript
 {
-    if (uiEffIndex != EFFECT_INDEX_1 || uiSpellId != SPELL_SERVING_MUTTON || pCaster->GetTypeId() != TYPEID_PLAYER)
-        return false;
-
-    npc_dragonmaw_peonAI* pPeonAI = dynamic_cast<npc_dragonmaw_peonAI*>(pCreatureTarget->AI());
-
-    if (!pPeonAI)
-        return false;
-
-    if (pPeonAI->SetPlayerTarget(pCaster->GetObjectGuid()))
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
-        pCreatureTarget->HandleEmote(EMOTE_ONESHOT_NONE);
-        return true;
-    }
+        if (effIdx != EFFECT_INDEX_1)
+            return;
 
-    return false;
-}
+        Unit* caster = spell->GetCaster();
+        npc_dragonmaw_peonAI* peonAI = dynamic_cast<npc_dragonmaw_peonAI*>(spell->GetUnitTarget()->AI());
+
+        if (!peonAI)
+            return;
+
+        if (peonAI->SetPlayerTarget(caster->GetObjectGuid()))
+        {
+            spell->GetUnitTarget()->HandleEmote(EMOTE_ONESHOT_NONE);
+            return;
+        }
+    }
+};
 
 /*######
 # npc_wilda
@@ -1213,14 +1216,13 @@ enum
 
 struct npc_totem_of_spiritsAI : public ScriptedAI
 {
-    npc_totem_of_spiritsAI(Creature* creature) : ScriptedAI(creature)
+    npc_totem_of_spiritsAI(Creature* creature) : ScriptedAI(creature), m_uiElementalSieveTimer(2500)
     {
         SetReactState(REACT_PASSIVE);
         Reset();
-        m_uiElementalSieveTimer = 2500; // needs to be cast non-stop without interference from evade and some such
     }
 
-    uint32 m_uiElementalSieveTimer;
+    uint32 m_uiElementalSieveTimer; // needs to be cast non-stop without interference from evade and some such
 
     void Reset() override {}
 
@@ -1264,37 +1266,40 @@ struct npc_totem_of_spiritsAI : public ScriptedAI
     }
 };
 
-bool EffectDummyCreature_npc_totem_of_spirits(Unit* /*pCaster*/, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 36025 - Earth Soul Captured
+// 36115 - Fiery Soul Captured
+// 36170 - Water Soul Captured
+// 36181 - Air Soul Captured
+struct ElementalCapturedCredit : public SpellScript
 {
-    if (uiEffIndex != EFFECT_INDEX_0)
-        return false;
-
-    switch (uiSpellId)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        case SPELL_EARTH_CAPTURED:
+        Unit* target = spell->GetUnitTarget();
+        switch (spell->m_spellInfo->Id)
         {
-            pCreatureTarget->CastSpell(pCreatureTarget, SPELL_EARTH_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
-            return true;
-        }
-        case SPELL_FIERY_CAPTURED:
-        {
-            pCreatureTarget->CastSpell(pCreatureTarget, SPELL_FIERY_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
-            return true;
-        }
-        case SPELL_WATER_CAPTURED:
-        {
-            pCreatureTarget->CastSpell(pCreatureTarget, SPELL_WATER_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
-            return true;
-        }
-        case SPELL_AIR_CAPTURED:
-        {
-            pCreatureTarget->CastSpell(pCreatureTarget, SPELL_AIR_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
-            return true;
+            case SPELL_EARTH_CAPTURED:
+            {
+                target->CastSpell(nullptr, SPELL_EARTH_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
+                return;
+            }
+            case SPELL_FIERY_CAPTURED:
+            {
+                target->CastSpell(nullptr, SPELL_FIERY_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
+                return;
+            }
+            case SPELL_WATER_CAPTURED:
+            {
+                target->CastSpell(nullptr, SPELL_WATER_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
+                return;
+            }
+            case SPELL_AIR_CAPTURED:
+            {
+                target->CastSpell(nullptr, SPELL_AIR_CAPTURED_CREDIT, TRIGGERED_OLD_TRIGGERED);
+                return;
+            }
         }
     }
-
-    return false;
-}
+};
 
 bool ProcessEventId_event_spell_soul_captured_credit(uint32 uiEventId, Object* pSource, Object* /*pTarget*/, bool bIsStart)
 {
@@ -1324,6 +1329,38 @@ bool ProcessEventId_event_spell_soul_captured_credit(uint32 uiEventId, Object* p
 
     return false;
 }
+
+// 36035 - Elemental Sieve
+struct ElementalSieve : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply || aura->GetRemoveMode() != AURA_REMOVE_BY_DEATH)
+            return;
+
+        Pet* pCaster = dynamic_cast<Pet*>(aura->GetCaster());
+        Unit* target = aura->GetTarget();
+
+        // aura only affect the spirit totem, since this is the one that need to be in range.
+        // It is possible though, that player is the one who should actually have the aura
+        // and check for presense of spirit totem, but then we can't script the dummy.
+        if (!pCaster)
+            return;
+
+        // Summon the soul of the spirit and cast the visual
+        uint32 soulEntry = 0;
+        switch (target->GetEntry())
+        {
+            case 21050: soulEntry = 21073; break; // Earthen Soul
+            case 21061: soulEntry = 21097; break; // Fiery Soul
+            case 21059: soulEntry = 21109; break; // Watery Soul
+            case 21060: soulEntry = 21116; break; // Airy Soul
+        }
+
+        target->CastSpell(nullptr, 36206, TRIGGERED_OLD_TRIGGERED);
+        pCaster->SummonCreature(soulEntry, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0, TEMPSPAWN_TIMED_OOC_OR_CORPSE_DESPAWN, 10000);
+    }
+};
 
 /*#####
 #npc_shadowlord_deathwail
@@ -1459,7 +1496,7 @@ struct npc_shadowlord_deathwailAI : public ScriptedAI
         m_bDeathwailGrounded = false;
         m_bEventInProgress = false;
         SetReactState(REACT_PASSIVE);
-        m_creature->SetByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+        m_creature->SetAnimTier(AnimTier::Hover);
         m_creature->SetLevitate(true);
         SetDeathPrevention(true);
         Reset();
@@ -1531,7 +1568,7 @@ struct npc_shadowlord_deathwailAI : public ScriptedAI
             case 9:
                 DoScriptText(SAY_HEART_RETRIEVED, m_creature);
                 SetReactState(REACT_AGGRESSIVE);
-                m_creature->RemoveByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+                m_creature->SetAnimTier(AnimTier::Ground);
                 m_creature->SetLevitate(false);
 
                 if (GameObject* goHoF = GetClosestGameObjectWithEntry(m_creature, GOBJECT_HEART_OF_FURY, 30.0f))
@@ -2468,29 +2505,25 @@ UnitAI* GetAI_npc_domesticated_felboar(Creature* pCreature)
     return new npc_domesticated_felboarAI(pCreature);
 }
 
-bool EffectDummyCreature_npc_shadowmoon_tuber_node(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 36652 - Tuber Whistle
+struct TuberWhistle : public SpellScript
 {
-    // always check spellid and effectindex
-    if (uiSpellId == SPELL_TUBER_WHISTLE && uiEffIndex == EFFECT_INDEX_0)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        if (pCreatureTarget->GetEntry() == NPC_SHADOWMOON_TUBER_NODE)
-        {
-            // Check if tuber mound exists or it's spawned
-            GameObject* pTuber = GetClosestGameObjectWithEntry(pCreatureTarget, GO_SHADOWMOON_TUBER_MOUND, 1.0f);
-            if (!pTuber || !pTuber->IsSpawned())
-                return true;
+        Unit* target = spell->GetUnitTarget();
+        if (!target->AI())
+            return;
 
-            // Call nearby felboar
-            if (Creature* pBoar = GetClosestCreatureWithEntry(pCreatureTarget, NPC_DOMESTICATED_FELBOAR, 40.0f))
-                pCreatureTarget->AI()->SendAIEvent(AI_EVENT_START_EVENT, pCaster, pBoar);
-        }
+        // Check if tuber mound exists or it's spawned
+        GameObject* tuber = GetClosestGameObjectWithEntry(target, GO_SHADOWMOON_TUBER_MOUND, 1.0f);
+        if (!tuber || !tuber->IsSpawned())
+            return;
 
-        // always return true when we are handling this spell and effect
-        return true;
+        // Call nearby felboar
+        if (Creature* boar = GetClosestCreatureWithEntry(target, NPC_DOMESTICATED_FELBOAR, 40.0f))
+            target->AI()->SendAIEvent(AI_EVENT_START_EVENT, spell->GetCaster(), boar);
     }
-
-    return false;
-}
+};
 
 /*######
 ## npc_veneratus_spawn_node
@@ -5369,7 +5402,6 @@ void AddSC_shadowmoon_valley()
     pNewScript = new Script;
     pNewScript->Name = "npc_dragonmaw_peon";
     pNewScript->GetAI = &GetNewAIInstance<npc_dragonmaw_peonAI>;
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_dragonmaw_peon;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -5391,7 +5423,6 @@ void AddSC_shadowmoon_valley()
     pNewScript = new Script;
     pNewScript->Name = "npc_totem_of_spirits";
     pNewScript->GetAI = &GetNewAIInstance<npc_totem_of_spiritsAI>;
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_totem_of_spirits;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -5424,11 +5455,6 @@ void AddSC_shadowmoon_valley()
     pNewScript = new Script;
     pNewScript->Name = "npc_domesticated_felboar";
     pNewScript->GetAI = &GetAI_npc_domesticated_felboar;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
-    pNewScript->Name = "npc_shadowmoon_tuber_node";
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_shadowmoon_tuber_node;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -5499,9 +5525,13 @@ void AddSC_shadowmoon_valley()
     pNewScript->GetAI = &GetAI_npc_bt_battle_sensor;
     pNewScript->RegisterSelf();
 
+    RegisterSpellScript<ServingPoisonedMutton>("spell_serving_poisoned_mutton");
+    RegisterSpellScript<TuberWhistle>("spell_tuber_whistle");
     RegisterSpellScript<DragonmawKnockdownTheAggroCheck>("spell_dragonmaw_knockdown_the_aggro_check");
     RegisterSpellScript<TagGreaterFelfireDiemetradon>("spell_tag_for_single_use");
     RegisterSpellScript<DragonmawIllusionBase>("spell_dragonmaw_illusion_base");
     RegisterSpellScript<DragonmawIllusionTransform>("spell_dragonmaw_illusion_transform");
     RegisterSpellScript<CallingRider>("spell_calling_rider");
+    RegisterSpellScript<ElementalCapturedCredit>("spell_elemental_captured_credit");
+    RegisterSpellScript<ElementalSieve>("spell_elemental_sieve");
 }

@@ -137,6 +137,9 @@ void WorldSession::HandleSwapItem(WorldPacket& recv_data)
     }
 
     _player->SwapItem(src, dst);
+
+    if (dst == EQUIPMENT_SLOT_MAINHAND || dst == EQUIPMENT_SLOT_OFFHAND || src == EQUIPMENT_SLOT_MAINHAND || src == EQUIPMENT_SLOT_OFFHAND)
+        _player->SendResetRangedCombatTimer();
 }
 
 void WorldSession::HandleAutoEquipItemOpcode(WorldPacket& recv_data)
@@ -185,21 +188,22 @@ void WorldSession::HandleAutoEquipItemOpcode(WorldPacket& recv_data)
         // check dest->src move possibility
         ItemPosCountVec sSrc;
         uint16 eSrc = 0;
+        uint8 bagSlot = 0;
         if (Player::IsInventoryPos(src))
         {
-            msg = _player->CanStoreItem(srcbag, srcslot, sSrc, pDstItem, true);
+            msg = _player->CanStoreItem(srcbag, srcslot, sSrc, pDstItem, bagSlot, true);
             if (msg != EQUIP_ERR_OK)
-                msg = _player->CanStoreItem(srcbag, NULL_SLOT, sSrc, pDstItem, true);
+                msg = _player->CanStoreItem(srcbag, NULL_SLOT, sSrc, pDstItem, bagSlot, true);
             if (msg != EQUIP_ERR_OK)
-                msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sSrc, pDstItem, true);
+                msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sSrc, pDstItem, bagSlot, true);
         }
         else if (Player::IsBankPos(src))
         {
-            msg = _player->CanBankItem(srcbag, srcslot, sSrc, pDstItem, true);
+            msg = _player->CanBankItem(srcbag, srcslot, sSrc, pDstItem, true, bagSlot);
             if (msg != EQUIP_ERR_OK)
-                msg = _player->CanBankItem(srcbag, NULL_SLOT, sSrc, pDstItem, true);
+                msg = _player->CanBankItem(srcbag, NULL_SLOT, sSrc, pDstItem, true, bagSlot);
             if (msg != EQUIP_ERR_OK)
-                msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, sSrc, pDstItem, true);
+                msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, sSrc, pDstItem, true, bagSlot);
         }
         else if (Player::IsEquipmentPos(src))
         {
@@ -210,7 +214,7 @@ void WorldSession::HandleAutoEquipItemOpcode(WorldPacket& recv_data)
 
         if (msg != EQUIP_ERR_OK)
         {
-            _player->SendEquipError(msg, pDstItem, pSrcItem);
+            _player->SendEquipError(msg, pDstItem, pSrcItem, bagSlot);
             return;
         }
 
@@ -231,6 +235,11 @@ void WorldSession::HandleAutoEquipItemOpcode(WorldPacket& recv_data)
 
         _player->AutoUnequipOffhandIfNeed(srcbag);
     }
+
+    if (Player::IsBagPos(dest))
+        _player->SendOpenContainer(pSrcItem->GetObjectGuid());
+    else if (dest == EQUIPMENT_SLOT_MAINHAND || dest == EQUIPMENT_SLOT_OFFHAND || src == EQUIPMENT_SLOT_MAINHAND || src == EQUIPMENT_SLOT_OFFHAND)
+        _player->SendResetRangedCombatTimer();
 }
 
 void WorldSession::HandleDestroyItemOpcode(WorldPacket& recv_data)
@@ -271,7 +280,7 @@ void WorldSession::HandleDestroyItemOpcode(WorldPacket& recv_data)
     if (count)
     {
         uint32 i_count = count;
-        _player->DestroyItemCount(pItem, i_count, true);
+        _player->DestroyItemCount(*pItem, i_count, true);
     }
     else
         _player->DestroyItem(bag, slot, true);
@@ -456,6 +465,8 @@ void WorldSession::HandleReadItemOpcode(WorldPacket& recv_data)
         else
         {
             data.Initialize(SMSG_READ_ITEM_FAILED, 8);
+            // data << uint8(0); // hasTranslationProgress
+            // data << uint32(0); // translationProgressDuration
             DETAIL_LOG("STORAGE: Unable to read item");
             _player->SendEquipError(msg, pItem, nullptr);
         }
@@ -585,13 +596,14 @@ void WorldSession::HandleSellItemOpcode(WorldPacket& recv_data)
         _player->InterruptNonMeleeSpells(false);
         pItem->SetCount(pItem->GetCount() - count);
         _player->ItemRemovedQuestCheck(pItem->GetEntry(), count);
+        UpdateData data;
         if (_player->IsInWorld())
-            pItem->SendCreateUpdateToPlayer(_player);
+            _player->GetMap()->AddUpdateObject(pItem);
         pItem->SetState(ITEM_CHANGED, _player);
 
         _player->AddItemToBuyBackSlot(pNewItem, money);
         if (_player->IsInWorld())
-            pNewItem->SendCreateUpdateToPlayer(_player);
+            _player->GetMap()->AddUpdateCreateObject(pNewItem);
     }
     else
     {
@@ -633,7 +645,8 @@ void WorldSession::HandleBuybackItem(WorldPacket& recv_data)
         }
 
         ItemPosCountVec dest;
-        InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, dest, pItem, false);
+        uint8 bagSlot = 0;
+        InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, dest, pItem, bagSlot, false);
         if (msg == EQUIP_ERR_OK)
         {
             _player->ModifyMoney(-(int32)price);
@@ -643,7 +656,7 @@ void WorldSession::HandleBuybackItem(WorldPacket& recv_data)
             _player->StoreItem(dest, pItem, true);
         }
         else
-            _player->SendEquipError(msg, pItem, nullptr);
+            _player->SendEquipError(msg, pItem, nullptr, bagSlot);
     }
     else
         _player->SendBuyError(BUY_ERR_CANT_FIND_ITEM, pCreature, 0, 0);
@@ -872,10 +885,11 @@ void WorldSession::HandleAutoStoreBagItemOpcode(WorldPacket& recv_data)
     }
 
     ItemPosCountVec dest;
-    InventoryResult msg = _player->CanStoreItem(dstbag, NULL_SLOT, dest, pItem, false);
+    uint8 bagSlot = 0;
+    InventoryResult msg = _player->CanStoreItem(dstbag, NULL_SLOT, dest, pItem, bagSlot, false);
     if (msg != EQUIP_ERR_OK)
     {
-        _player->SendEquipError(msg, pItem, nullptr);
+        _player->SendEquipError(msg, pItem, nullptr, bagSlot);
         return;
     }
 
@@ -932,6 +946,8 @@ void WorldSession::HandleBuyBankSlotOpcode(WorldPacket& recvPacket)
     ++slot;
 
     DETAIL_LOG("PLAYER: Buy bank bag slot, slot number = %u", slot);
+    if (slot > (BANK_SLOT_BAG_END - BANK_SLOT_BAG_START))
+        return;
 
     BankBagSlotPricesEntry const* slotEntry = sBankBagSlotPricesStore.LookupEntry(slot);
 
@@ -975,10 +991,11 @@ void WorldSession::HandleAutoBankItemOpcode(WorldPacket& recvPacket)
         return;
 
     ItemPosCountVec dest;
-    InventoryResult msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, dest, pItem, false);
+    uint8 bagSlot = 0;
+    InventoryResult msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, dest, pItem, false, bagSlot);
     if (msg != EQUIP_ERR_OK)
     {
-        _player->SendEquipError(msg, pItem, nullptr);
+        _player->SendEquipError(msg, pItem, nullptr, bagSlot);
         return;
     }
 
@@ -1009,10 +1026,11 @@ void WorldSession::HandleAutoStoreBankItemOpcode(WorldPacket& recvPacket)
     if (Player::IsBankPos(srcbag, srcslot))                // moving from bank to inventory
     {
         ItemPosCountVec dest;
-        InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, dest, pItem, false);
+        uint8 bagSlot = 0;
+        InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, dest, pItem, bagSlot, false);
         if (msg != EQUIP_ERR_OK)
         {
-            _player->SendEquipError(msg, pItem, nullptr);
+            _player->SendEquipError(msg, pItem, nullptr, bagSlot);
             return;
         }
 
@@ -1022,10 +1040,11 @@ void WorldSession::HandleAutoStoreBankItemOpcode(WorldPacket& recvPacket)
     else                                                    // moving from inventory to bank
     {
         ItemPosCountVec dest;
-        InventoryResult msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, dest, pItem, false);
+        uint8 bagSlot = 0;
+        InventoryResult msg = _player->CanBankItem(NULL_BAG, NULL_SLOT, dest, pItem, false, bagSlot);
         if (msg != EQUIP_ERR_OK)
         {
-            _player->SendEquipError(msg, pItem, nullptr);
+            _player->SendEquipError(msg, pItem, nullptr, bagSlot);
             return;
         }
 
@@ -1205,7 +1224,7 @@ void WorldSession::HandleWrapItemOpcode(WorldPacket& recv_data)
     CharacterDatabase.CommitTransaction();
 
     uint32 count = 1;
-    _player->DestroyItemCount(gift, count, true);
+    _player->DestroyItemCount(*gift, count, true);
 }
 
 void WorldSession::HandleSocketOpcode(WorldPacket& recv_data)

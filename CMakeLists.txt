@@ -16,7 +16,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 # Minimum required cmake version to run the build
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0069 NEW)
 
 # Will cache object files if ccache is available
@@ -28,8 +28,8 @@ endif()
 
 project(CMaNGOS_WoTLK)
 
-# Require C++ 17 support
-set(CMAKE_CXX_STANDARD 17)
+# Require C++ 20 support
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -135,11 +135,6 @@ endif()
 # find Git: used to get the revision number
 find_package(Git)
 
-if(NOT MSVC AND PCH)
-  # Include cotire to manage PCH support
-  include(cotire)
-endif()
-
 set(BIN_FOLDER_NAME bin)
 set(CONF_FOLDER_NAME etc)
 set(LIBS_FOLDER_NAME lib)
@@ -154,14 +149,8 @@ if(WIN32)
   set(BIN_DIR ${CMAKE_INSTALL_PREFIX})
   set(LIBS_DIR ${BIN_DIR})
   set(CONF_DIR ${BIN_DIR})
-  get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG) # ninja generator does not support $(Configuration)
-  if(MSVC AND "$ENV{CLION_IDE}" STREQUAL "" AND IS_MULTI_CONFIG)
-    set(DEV_BIN_DIR ${DEV_BINARY_DIR}/${BIN_FOLDER_NAME}/${DEP_ARCH}_$(Configuration))
-    set(DEV_PROVIDED_LIBS_FOLDER ${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_$(Configuration))
-  else()
-    set(DEV_BIN_DIR ${DEV_BINARY_DIR}/${BIN_FOLDER_NAME}/${DEP_ARCH}_${CMAKE_BUILD_TYPE})
-    set(DEV_PROVIDED_LIBS_FOLDER ${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_${CMAKE_BUILD_TYPE})
-  endif()
+  set(DEV_BIN_DIR ${DEV_BINARY_DIR}/${BIN_FOLDER_NAME}/${DEP_ARCH}_$<CONFIG>)
+  set(DEV_PROVIDED_LIBS_FOLDER ${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_$<CONFIG>)
 
   # Define install rules for provided libs
   set(BIN_LIBS ${DEV_PROVIDED_LIBS_FOLDER}/libmysql.dll)
@@ -171,9 +160,11 @@ if(WIN32)
       set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/dbghelp.dll)
     endif()
     set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/libcrypto-3.dll)
+    set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/libssl-3.dll)
     set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/legacy.dll)
   else()
     set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/libcrypto-3-x64.dll)
+    set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/libssl-3-x64.dll)
     set(BIN_LIBS ${BIN_LIBS} ${DEV_PROVIDED_LIBS_FOLDER}/legacy.dll)
   endif()
   install(FILES
@@ -200,22 +191,28 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_BOOST_CMAKE ON)   # should fix build for boost 1.71
 #set(Boost_DEBUG ON)
 
-if(MSVC)
-  # Use at least verion 3.8.1 of FindBoost to fix some issues. Especialy in MSVC with fixed Toolset issues.
-  # This is a workaround while VisualStudio does not embed higher cmake version than 3.7.2
-  if(${CMAKE_VERSION} VERSION_LESS "3.11.3")
-    list(APPEND CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/macros/FindBoost")
-    message(STATUS "FindBoost: included version 3.11.3 of FindBoost is used.")
-  endif()
-endif()
-
 # In our case use new way to treat BOOST_ROOT environement variable
 if (POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW) # find_package() uses upper-case <PACKAGENAME>_ROOT variables
+endif()
+
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
+
 # Find needed packages and if necessery abort if something important is missing
-find_package(Boost REQUIRED COMPONENTS system program_options thread regex serialization filesystem)
+find_package(Boost 1.70.0 REQUIRED COMPONENTS program_options thread regex serialization filesystem)
+
+if (APPLE)
+    find_package(ICU COMPONENTS uc i18n data REQUIRED)
+    add_library(icuuc ALIAS ICU::uc)
+    add_library(icui18n ALIAS ICU::i18n)
+    add_library(icudata ALIAS ICU::data)
+endif()
 
 if(NOT Boost_FOUND AND (BUILD_GAME_SERVER OR BUILD_LOGIN_SERVER))
   message(STATUS "BOOST_ROOT = $ENV{BOOST_ROOT}")
@@ -235,9 +232,13 @@ endif()
 
 # Win32 delivered packages
 if(WIN32 AND (BUILD_GAME_SERVER OR BUILD_LOGIN_SERVER OR BUILD_EXTRACTORS))
-  set(MYSQL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/dep/lib/include/mysql")
-  set(MYSQL_LIBRARY "${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_release/libmysql.lib")
-  set(MYSQL_DEBUG_LIBRARY "${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_debug/libmysql.lib")
+  if(SQLITE)
+    find_package(SQLite3 REQUIRED)
+  else()
+    set(MYSQL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/dep/lib/include/mysql")
+    set(MYSQL_LIBRARY "${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_release/libmysql.lib")
+    set(MYSQL_DEBUG_LIBRARY "${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_debug/libmysql.lib")
+  endif()
   set(OPENSSL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/dep/lib/include")
   set(OPENSSL_LIBRARIES
      "${CMAKE_SOURCE_DIR}/dep/lib/${DEP_ARCH}_release/libcrypto.lib"
@@ -333,6 +334,18 @@ if(NOT BUILD_GAME_SERVER AND BUILD_DEPRECATED_PLAYERBOT)
   message(STATUS "BUILD_DEPRECATED_PLAYERBOT forced to OFF due to BUILD_GAME_SERVER is not set")
 endif()
 
+if(BUILD_PLAYERBOTS)
+  if(BUILD_DEPRECATED_PLAYERBOT)
+    set(BUILD_DEPRECATED_PLAYERBOT OFF)
+    message(STATUS "BUILD_DEPRECATED_PLAYERBOT forced to OFF because BUILD_PLAYERBOTS is set")
+  endif()
+
+  if(NOT BUILD_GAME_SERVER)
+    set(BUILD_PLAYERBOTS OFF)
+    message(STATUS "BUILD_PLAYERBOTS forced to OFF due to BUILD_GAME_SERVER is not set")
+  endif()
+endif()
+
 if(PCH)
   if(${CMAKE_VERSION} VERSION_LESS "3.16")
     message("PCH is not supported by your CMake version")
@@ -412,7 +425,7 @@ if(BUILD_RECASTDEMOMOD)
     endif()
     add_subdirectory(contrib/recastdemomod)
   else()
-    message(STATUS "BUILD_RECASTDEMOMOD forced to OFF. Not supported on non windows system.")
+    add_subdirectory(contrib/recastdemomod)
   endif()
 endif()
 

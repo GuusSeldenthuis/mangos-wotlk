@@ -203,7 +203,7 @@ bool GameObject::Create(uint32 dbGuid, uint32 guidlow, uint32 name_id, Map* map,
         return false;
     }
 
-    Object::_Create(dbGuid, guidlow, goinfo->id, HIGHGUID_GAMEOBJECT);
+    Object::_Create(dbGuid, guidlow, goinfo->id, goinfo->GetHighGuid());
 
     m_goInfo = goinfo;
 
@@ -302,6 +302,9 @@ bool GameObject::Create(uint32 dbGuid, uint32 guidlow, uint32 name_id, Map* map,
     // Check if GameObject is Large, skip if map has same or better visibility (e.g. Battleground)
     if (GetGOInfo()->IsLargeGameObject() && GetVisibilityData().GetVisibilityDistance() < VISIBILITY_DISTANCE_LARGE)
         GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+
+    if (GetGOInfo()->IsInfiniteGameObject())
+        GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
     return true;
 }
@@ -718,8 +721,12 @@ void GameObject::Update(const uint32 diff)
             {
                 // since pool system can fail to roll unspawned object, this one can remain spawned, so must set respawn nevertheless
                 if (IsSpawnedByDefault())
-                    if (GameObjectData const* data = sObjectMgr.GetGOData(GetObjectGuid().GetCounter()))
+                {
+                    if (GetGameObjectGroup() && GetGameObjectGroup()->IsRespawnOverriden())
+                        m_respawnDelay = GetGameObjectGroup()->GetRandomRespawnTime();
+                    else if (GameObjectData const* data = sObjectMgr.GetGOData(GetDbGuid()))
                         m_respawnDelay = data->GetRandomRespawnTime();
+                }
             }
             else if (m_respawnOverrideOnce)
                 m_respawnOverriden = false;
@@ -748,7 +755,18 @@ void GameObject::Update(const uint32 diff)
 
             // can be not in world at pool despawn
             if (IsInWorld())
-                UpdateObjectVisibility();
+            {
+                if (!IsUsingNewSpawningSystem()) // schedule out of range
+                {
+                    auto& clientGuids = GetClientGuidsIAmAt();
+                    for (auto& clientGuid : clientGuids)
+                        if (Player* client = GetMap()->GetPlayer(clientGuid))
+                            client->RemoveAtClient(this, true);
+                    GetMap()->AddUpdateRemoveObject(GetClientGuidsIAmAt(), GetObjectGuid());
+                    clientGuids.clear();
+                    GetClientGuidsIAmAt().clear();
+                }
+            }
 
             break;
         }
@@ -931,6 +949,9 @@ bool GameObject::LoadFromDB(uint32 dbGuid, Map* map, uint32 newGuid, uint32 forc
             entry = group->GetGuidEntry(dbGuid);
     }
 
+    if (uint32 randomEntry = sObjectMgr.GetRandomGameObjectEntry(dbGuid))
+        entry = randomEntry;
+
     bool dynguid = false;
     if (map->IsDynguidForced())
         dynguid = true;
@@ -941,11 +962,15 @@ bool GameObject::LoadFromDB(uint32 dbGuid, Map* map, uint32 newGuid, uint32 forc
             dynguid = true;
     }
 
-    if (dynguid || newGuid == 0)
-        newGuid = map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT);
+    GameObjectInfo const* goinfo = ObjectMgr::GetGameObjectInfo(entry);
+    if (!goinfo)
+    {
+        sLog.outErrorDb("Gameobject (GUID: %u) not created: Entry %u does not exist in `gameobject_template`. Map: %u  (X: %f Y: %f Z: %f) ang: %f", dbGuid, entry, map->GetId(), x, y, z, ang);
+        return false;
+    }
 
-    if (uint32 randomEntry = sObjectMgr.GetRandomGameObjectEntry(dbGuid))
-        entry = randomEntry;
+    if (dynguid || newGuid == 0)
+        newGuid = map->GenerateLocalLowGuid(goinfo->GetHighGuid());
 
     if (!Create(dbGuid, newGuid, entry, map, phaseMask, x, y, z, ang, data->rotation, animprogress, GO_STATE_READY))
         return false;
@@ -1131,10 +1156,6 @@ bool GameObject::isVisibleForInState(Player const* u, WorldObject const* viewPoi
     if (!GetGOInfo()->displayId)
         return false;
 
-    // Transport always visible at this step implementation
-    if (IsMoTransport() && IsInMap(u))
-        return true;
-
     // quick check visibility false cases for non-GM-mode
     if (!u->IsGameMaster())
     {
@@ -1209,6 +1230,9 @@ bool GameObject::isVisibleForInState(Player const* u, WorldObject const* viewPoi
             }
         }
     }
+
+    if (GetVisibilityData().IsInfiniteVisibility() && InSamePhase(viewPoint))
+        return true;
 
     // check distance
     return IsWithinDistInMap(viewPoint, GetVisibilityData().GetVisibilityDistance(), false);
@@ -1453,6 +1477,75 @@ void GameObject::SwitchDoorOrButton(bool activate, bool alternative /* = false *
         SetGoState(GO_STATE_READY);
 }
 
+bool GameObject::CanUseNow(Player const* player) const
+{
+    switch (GetGoType())
+    {
+        case GAMEOBJECT_TYPE_BARBER_CHAIR:
+        {
+            if (player->GetDisplayId() != player->GetNativeDisplayId() || player->IsShapeShifted())
+                return false;
+            [[fallthrough]];
+        }
+        case GAMEOBJECT_TYPE_CHAIR:
+        {
+            float x, y;
+            std::tie(x, y) = GetClosestChairSlotPosition(player);
+            if (player->GetDistance(x, y, GetPositionZ(), DIST_CALC_NONE, GetTransport()) > 3.f * 3.f)
+                return false;
+            break;
+        }
+        case GAMEOBJECT_TYPE_SUMMONING_RITUAL:
+        {
+            SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(m_goInfo->summoningRitual.spellId);
+            if (spellInfo && spellInfo->HasAttribute(SPELL_ATTR_NOT_IN_COMBAT_ONLY_PEACEFUL) && player->IsInCombat())
+                return false;
+
+            WorldObject const* owner = GetOwner();
+            if (owner->IsPlayer())
+            {
+                Player const* ownerPlayer = static_cast<Player const*>(owner);
+                if (!player->IsInGroup(ownerPlayer, false))
+                    return false;
+            }
+            break;
+        }
+    }
+
+    if (!GetGOInfo()->GetLockId())
+    {
+        // mounted and cannot unmount
+        if (player->GetMountID() && !GetGOInfo()->IsUsableMounted() && (player->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_TAXI_FLIGHT) || !player->IsClientControlled()))
+            return false;
+
+        // We can't interact with anyone while being shapeshifted, unless form flags allow us to do so
+        if (player->IsShapeShifted())
+        {
+            if (SpellShapeshiftFormEntry const* formEntry = sSpellShapeshiftFormStore.LookupEntry(player->GetShapeshiftForm()))
+            {
+                // meant to have an can unshift check here
+                if (!(formEntry->flags1 & SHAPESHIFT_FLAG_CAN_NPC_INTERACT) && (player->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_TAXI_FLIGHT) || !player->IsClientControlled() || (formEntry->flags1 & SHAPESHIFT_FLAG_DONT_AUTO_UNSHIFT) != 0))
+                    return false;
+            }
+            else
+                return false;
+        }
+    }
+
+    // client checks this but needs recheck
+    if (!GetGOInfo()->IsUsableInCombat() && player->IsInCombat())
+        return false;
+
+    // client checks this but needs recheck
+    if (GetGOInfo()->CannotBeUsedUnderImmunity() && player->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE))
+        return false;
+
+    if (HasFlag(GAMEOBJECT_FLAGS, GO_FLAG_LOCKED) && !GetSpellForLock(player)) // we should not allow use of a locked GO
+        return false;
+
+    return true;
+}
+
 void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
 {
     // user must be provided
@@ -1551,7 +1644,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             if (GetGOInfo()->chest.eventId > 0)
             {
                 DEBUG_LOG("Chest ScriptStart id %u for %s (opened by %s)", GetGOInfo()->chest.eventId, GetGuidStr().c_str(), user->GetGuidStr().c_str());
-                StartEvents_Event(GetMap(), GetGOInfo()->chest.eventId, user, this);
+                GetMap()->StartEvent(GetGOInfo()->chest.eventId, user, this);
             }
 
             if (!GetGOInfo()->chest.lockId)
@@ -1583,7 +1676,8 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             std::set<uint32> confirmedGoCasts =
             {
                 6636,
-                24425
+                24425,
+                47680
             };
             if (confirmedGoCasts.find(goInfo->trap.spellId) != confirmedGoCasts.end())
                 caster = nullptr;
@@ -1598,10 +1692,10 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             if (goInfo->trap.charges > 0)
                 AddUse();
 
-            if (IsBattleGroundTrap && user->GetTypeId() == TYPEID_PLAYER)
+            if (IsBattleGroundTrap && user->IsPlayer())
             {
                 // BattleGround gameobjects case
-                if (BattleGround* bg = ((Player*)user)->GetBattleGround())
+                if (BattleGround* bg = static_cast<Player*>(user)->GetBattleGround())
                     bg->HandleTriggerBuff(GetObjectGuid());
             }
 
@@ -1611,7 +1705,6 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             if (goInfo->ExtraFlags & GAMEOBJECT_EXTRA_FLAG_CUSTOM_ANIM_ON_USE)
                 SendGameObjectCustomAnim(GetObjectGuid());
 
-            // TODO: Despawning of traps? (Also related to code in ::Update)
             return;
         }
         case GAMEOBJECT_TYPE_CHAIR:                         // 7 Sitting: Wooden bench, chairs
@@ -1634,7 +1727,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             if (uint32 eventId = GetGOInfo()->chair.triggeredEvent)
             {
                 DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "Chair ScriptStart id %u for %s (Used by %s).", eventId, GetGuidStr().c_str(), player->GetGuidStr().c_str());
-                StartEvents_Event(GetMap(), eventId, user, this);
+                GetMap()->StartEvent(eventId, user, this);
             }
             return;
         }
@@ -1692,7 +1785,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
                 {
                     DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "Goober ScriptStart id %u for %s (Used by %s).", info->goober.eventId, GetGuidStr().c_str(), player->GetGuidStr().c_str());
 
-                    StartEvents_Event(GetMap(), info->goober.eventId, player, this);
+                    GetMap()->StartEvent(info->goober.eventId, player, this);
                 }
 
                 // possible quest objective for active quests
@@ -1736,7 +1829,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
                 player->SendCinematicStart(info->camera.cinematicId);
 
             if (info->camera.eventID)
-                StartEvents_Event(GetMap(), info->camera.eventID, player, this);
+                GetMap()->StartEvent(info->camera.eventID, player, this);
 
             return;
         }
@@ -2012,7 +2105,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
                 GameObjectInfo const* info = GetGOInfo();
                 if (info && info->flagdrop.eventID)
                 {
-                    StartEvents_Event(GetMap(), info->flagdrop.eventID, this, player, true);
+                    GetMap()->StartEvent(info->flagdrop.eventID, this, player, true);
 
                     // handle spell data if available; this usually marks the player as the flag carrier in a battleground
                     spellId = info->flagdrop.pickupSpell;
@@ -2062,7 +2155,9 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
     SpellCastTargets targets;
     targets.setUnitTarget(user);
 
-    spell->SpellStart(&targets);
+    SpellCastResult result = spell->SpellStart(&targets);
+    if (result == SPELL_CAST_OK && onSuccess)
+        onSuccess();
 }
 
 // overwrite WorldObject function for proper name localization
@@ -2097,9 +2192,9 @@ struct QuaternionCompressed
     void Set(const Quat& quat)
     {
         int8 w_sign = (quat.w >= 0 ? 1 : -1);
-        int64 X = int32(quat.x * PACK_COEFF_X) * w_sign & ((1 << 22) - 1);
-        int64 Y = int32(quat.y * PACK_COEFF_YZ) * w_sign & ((1 << 21) - 1);
-        int64 Z = int32(quat.z * PACK_COEFF_YZ) * w_sign & ((1 << 21) - 1);
+        int64 X = int32(quat.x * static_cast<double>(PACK_COEFF_X)) * w_sign & ((1 << 22) - 1);
+        int64 Y = int32(quat.y * static_cast<double>(PACK_COEFF_YZ)) * w_sign & ((1 << 21) - 1);
+        int64 Z = int32(quat.z * static_cast<double>(PACK_COEFF_YZ)) * w_sign & ((1 << 21) - 1);
         m_raw = Z | (Y << 21) | (X << 42);
     }
 
@@ -2328,9 +2423,9 @@ void GameObject::SetCapturePointSlider(float value, bool isLocked)
         m_captureState = CAPTURE_STATE_WIN_ALLIANCE;
     else if ((int)m_captureSlider == CAPTURE_SLIDER_HORDE)
         m_captureState = CAPTURE_STATE_WIN_HORDE;
-    else if (m_captureSlider > CAPTURE_SLIDER_MIDDLE + info->capturePoint.neutralPercent * 0.5f)
+    else if (m_captureSlider > float(CAPTURE_SLIDER_MIDDLE) + info->capturePoint.neutralPercent * 0.5f)
         m_captureState = CAPTURE_STATE_PROGRESS_ALLIANCE;
-    else if (m_captureSlider < CAPTURE_SLIDER_MIDDLE - info->capturePoint.neutralPercent * 0.5f)
+    else if (m_captureSlider < float(CAPTURE_SLIDER_MIDDLE) - info->capturePoint.neutralPercent * 0.5f)
         m_captureState = CAPTURE_STATE_PROGRESS_HORDE;
     else
         m_captureState = CAPTURE_STATE_NEUTRAL;
@@ -2426,14 +2521,14 @@ void GameObject::TickCapturePoint()
     {
         progressFaction = ALLIANCE;
         m_captureSlider += deltaSlider;
-        if (m_captureSlider > CAPTURE_SLIDER_ALLIANCE)
+        if (m_captureSlider > float(CAPTURE_SLIDER_ALLIANCE))
             m_captureSlider = CAPTURE_SLIDER_ALLIANCE;
     }
     else
     {
         progressFaction = HORDE;
         m_captureSlider -= deltaSlider;
-        if (m_captureSlider < CAPTURE_SLIDER_HORDE)
+        if (m_captureSlider < float(CAPTURE_SLIDER_HORDE))
             m_captureSlider = CAPTURE_SLIDER_HORDE;
     }
 
@@ -2464,7 +2559,7 @@ void GameObject::TickCapturePoint()
 
     /* PROGRESS EVENTS */
     // alliance takes the tower from neutral, contested or horde (if there is no neutral area) to alliance
-    else if (m_captureState != CAPTURE_STATE_PROGRESS_ALLIANCE && m_captureSlider > CAPTURE_SLIDER_MIDDLE + neutralPercent * 0.5f && progressFaction == ALLIANCE)
+    else if ((m_captureState != CAPTURE_STATE_PROGRESS_ALLIANCE && m_captureState != CAPTURE_STATE_CONTEST_ALLIANCE) && m_captureSlider > float(CAPTURE_SLIDER_MIDDLE) + neutralPercent * 0.5f && progressFaction == ALLIANCE)
     {
         eventId = info->capturePoint.progressEventID1;
 
@@ -2477,7 +2572,7 @@ void GameObject::TickCapturePoint()
         m_captureState = CAPTURE_STATE_PROGRESS_ALLIANCE;
     }
     // horde takes the tower from neutral, contested or alliance (if there is no neutral area) to horde
-    else if (m_captureState != CAPTURE_STATE_PROGRESS_HORDE && m_captureSlider < CAPTURE_SLIDER_MIDDLE - neutralPercent * 0.5f && progressFaction == HORDE)
+    else if ((m_captureState != CAPTURE_STATE_PROGRESS_HORDE && m_captureState != CAPTURE_STATE_CONTEST_HORDE) && m_captureSlider < float(CAPTURE_SLIDER_MIDDLE) - neutralPercent * 0.5f && progressFaction == HORDE)
     {
         eventId = info->capturePoint.progressEventID2;
 
@@ -2492,13 +2587,13 @@ void GameObject::TickCapturePoint()
 
     /* NEUTRAL EVENTS */
     // alliance takes the tower from horde to neutral
-    else if (m_captureState != CAPTURE_STATE_NEUTRAL && m_captureSlider >= CAPTURE_SLIDER_MIDDLE - neutralPercent * 0.5f && m_captureSlider <= CAPTURE_SLIDER_MIDDLE + neutralPercent * 0.5f && progressFaction == ALLIANCE)
+    else if (m_captureState != CAPTURE_STATE_NEUTRAL && m_captureSlider >= float(CAPTURE_SLIDER_MIDDLE) - neutralPercent * 0.5f && m_captureSlider <= float(CAPTURE_SLIDER_MIDDLE) + neutralPercent * 0.5f && progressFaction == ALLIANCE)
     {
         eventId = info->capturePoint.neutralEventID1;
         m_captureState = CAPTURE_STATE_NEUTRAL;
     }
     // horde takes the tower from alliance to neutral
-    else if (m_captureState != CAPTURE_STATE_NEUTRAL && m_captureSlider >= CAPTURE_SLIDER_MIDDLE - neutralPercent * 0.5f && m_captureSlider <= CAPTURE_SLIDER_MIDDLE + neutralPercent * 0.5f && progressFaction == HORDE)
+    else if (m_captureState != CAPTURE_STATE_NEUTRAL && m_captureSlider >= float(CAPTURE_SLIDER_MIDDLE) - neutralPercent * 0.5f && m_captureSlider <= float(CAPTURE_SLIDER_MIDDLE) + neutralPercent * 0.5f && progressFaction == HORDE)
     {
         eventId = info->capturePoint.neutralEventID2;
         m_captureState = CAPTURE_STATE_NEUTRAL;
@@ -2519,7 +2614,7 @@ void GameObject::TickCapturePoint()
     }
 
     if (eventId)
-        StartEvents_Event(GetMap(), eventId, this, *capturingPlayers.begin(), true);
+        GetMap()->StartEvent(eventId, this, *capturingPlayers.begin(), true);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2573,7 +2668,7 @@ void GameObject::ForceGameObjectHealth(int32 diff, Unit* caster)
         m_useTimes = GetMaxHealth();
         // Start Event if exist
         if (caster && m_goInfo->destructibleBuilding.rebuildingEvent)
-            StartEvents_Event(GetMap(), m_goInfo->destructibleBuilding.rebuildingEvent, this, caster->GetBeneficiary(), true);
+            GetMap()->StartEvent(m_goInfo->destructibleBuilding.rebuildingEvent, this, caster->GetBeneficiary(), true);
     }
     else                                                    // Set to value
         m_useTimes = uint32(diff);
@@ -2591,7 +2686,7 @@ void GameObject::ForceGameObjectHealth(int32 diff, Unit* caster)
 
         // Start Event if exist
         if (caster && m_goInfo->destructibleBuilding.intactEvent)
-            StartEvents_Event(GetMap(), m_goInfo->destructibleBuilding.intactEvent, this, caster->GetBeneficiary(), true);
+            GetMap()->StartEvent(m_goInfo->destructibleBuilding.intactEvent, this, caster->GetBeneficiary(), true);
     }
     else if (m_useTimes == 0)                               // Destroyed
     {
@@ -2618,7 +2713,7 @@ void GameObject::ForceGameObjectHealth(int32 diff, Unit* caster)
 
             // Start Event if exist
             if (caster && m_goInfo->destructibleBuilding.destroyedEvent)
-                StartEvents_Event(GetMap(), m_goInfo->destructibleBuilding.destroyedEvent, this, caster->GetBeneficiary(), true);
+                GetMap()->StartEvent(m_goInfo->destructibleBuilding.destroyedEvent, this, caster->GetBeneficiary(), true);
         }
     }
     else if (m_useTimes <= m_goInfo->destructibleBuilding.damagedNumHits) // Damaged
@@ -2637,7 +2732,7 @@ void GameObject::ForceGameObjectHealth(int32 diff, Unit* caster)
 
             // Start Event if exist
             if (caster && m_goInfo->destructibleBuilding.damagedEvent)
-                StartEvents_Event(GetMap(), m_goInfo->destructibleBuilding.damagedEvent, this, caster->GetBeneficiary(), true);
+                GetMap()->StartEvent(m_goInfo->destructibleBuilding.damagedEvent, this, caster->GetBeneficiary(), true);
         }
     }
 
@@ -2883,16 +2978,23 @@ SpellEntry const* GameObject::GetSpellForLock(Player const* player) const
 
         for (auto&& playerSpell : player->GetSpellMap())
             if (SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(playerSpell.first))
-                for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
-                    if (spellInfo->Effect[i] == SPELL_EFFECT_OPEN_LOCK && ((uint32)spellInfo->EffectMiscValue[i]) == lock->Index[i])
-                        if (player->CalculateSpellEffectValue(nullptr, spellInfo, SpellEffectIndex(i), nullptr) >= int32(lock->Skill[i]))
+                for (uint32 effIdx = 0; effIdx < MAX_EFFECT_INDEX; ++effIdx)
+                    if (spellInfo->Effect[effIdx] == SPELL_EFFECT_OPEN_LOCK && ((uint32)spellInfo->EffectMiscValue[effIdx]) == lock->Index[i])
+                    {
+                        uint32 minRequiredSkill;
+                        if (lock->Skill[i])
+                            minRequiredSkill = lock->Skill[i];
+                        else
+                            minRequiredSkill = GetLevel() * 5;
+                        if (player->CalculateSpellEffectValue(nullptr, spellInfo, SpellEffectIndex(effIdx), nullptr) >= int32(minRequiredSkill))
                             return spellInfo;
+                    }
     }
 
     return nullptr;
 }
 
-std::pair<float, float> GameObject::GetClosestChairSlotPosition(Unit* user) const
+std::pair<float, float> GameObject::GetClosestChairSlotPosition(Unit const* user) const
 {
     Position pos = GetPosition(GetTransport());
     float outX, outY;
@@ -3009,6 +3111,23 @@ void GameObject::ClearGameObjectGroup()
     if (m_goGroup)
         m_goGroup->RemoveObject(this);
     m_goGroup = nullptr;
+}
+
+void GameObject::UpdateNextUpdateTime()
+{
+    // If we already have next update time don't reset it (movement mutation should do it)
+    if (m_nextUpdateTime)
+        return;
+
+    if (!m_events.IsEmpty() || m_AI)
+        SetNextUpdateTime(1);
+    else if (GetGOInfo()->IsSlowUpdateObject())
+        SetNextUpdateTime(urand(500, 1000));
+}
+
+uint32 GameObject::ShouldPerformObjectUpdate(uint32 const diff)
+{
+    return WorldObject::ShouldPerformObjectUpdate(diff);
 }
 
 QuaternionData GameObject::GetWorldRotation() const

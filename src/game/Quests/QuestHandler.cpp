@@ -186,7 +186,7 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPacket& recv_data)
             if (_player->CanCompleteQuest(quest))
                 _player->CompleteQuest(quest);
 
-            _player->GetAchievementMgr().StartTimedAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_COMPLETE_QUEST, quest);
+            _player->GetAchievementMgr().StartTimedAchievementCriteria(CriteriaTimedEvent::AcceptQuest, quest);
 
             _player->GetPlayerMenu()->CloseGossip();
 
@@ -300,8 +300,8 @@ void WorldSession::HandleQuestQueryOpcode(WorldPacket& recv_data)
         data << uint32(pQuest->GetCharTitleId());               // CharTitleId, new 2.4.0, player gets this title (id from CharTitles)
         data << uint32(pQuest->GetPlayersSlain());              // players slain
         data << uint32(pQuest->GetBonusTalents());              // bonus talents
-        data << uint32(0);                                      // bonus arena points
-        data << uint32(0);                                      // rew rep show mask?
+        data << int32(pQuest->GetRewArenaPoints());             // bonus arena points
+        data << uint32(pQuest->GetRewFactionFlags());           // rep reward faction flags
 
         int iI;
 
@@ -333,8 +333,7 @@ void WorldSession::HandleQuestQueryOpcode(WorldPacket& recv_data)
             data << int32(i);
 
         for (int i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)       // reward reputation override. No bonus is expected given
-            data << int32(0);
-        // data << int32(pQuest->RewRepValue[i]);            // current field for store of rep value, can be reused to implement "override value"
+            data << int32(pQuest->RewRepValue[i]);            // current field for store of rep value, can be reused to implement "override value"
 
         data << pQuest->GetPointMapId();
         data << pQuest->GetPointX();
@@ -350,17 +349,13 @@ void WorldSession::HandleQuestQueryOpcode(WorldPacket& recv_data)
         for (iI = 0; iI < QUEST_OBJECTIVES_COUNT; ++iI)
         {
             if (pQuest->ReqCreatureOrGOId[iI] < 0)
-            {
-                // client expected gameobject template id in form (id|0x80000000)
-                data << uint32((pQuest->ReqCreatureOrGOId[iI] * (-1)) | 0x80000000);
-            }
+                data << uint32((-pQuest->ReqCreatureOrGOId[iI]) | 0x80000000); // client expects gameobject template id in form (id|0x80000000)
             else
-            {
                 data << uint32(pQuest->ReqCreatureOrGOId[iI]);
-            }
+
             data << uint32(pQuest->ReqCreatureOrGOCount[iI]);
             data << uint32(pQuest->ReqSourceId[iI]);
-            data << uint32(0);                                  // req source count?
+            data << uint32(pQuest->ReqSourceCount[iI]);
         }
 
         for (iI = 0; iI < QUEST_ITEM_OBJECTIVES_COUNT; ++iI)

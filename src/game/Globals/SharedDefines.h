@@ -1316,42 +1316,6 @@ enum CreatureFamily
     CREATURE_FAMILY_SPIRIT_BEAST   = 46
 };
 
-enum CreatureTypeFlags
-{
-    CREATURE_TYPEFLAGS_TAMEABLE         = 0x00000001,       // Tameable by any hunter
-    CREATURE_TYPEFLAGS_GHOST_VISIBLE    = 0x00000002,       // Creatures which can _also_ be seen when player is a ghost, used in CanInteract function by client, can't be attacked
-    CREATURE_TYPEFLAGS_UNK3             = 0x00000004,       // "BOSS" flag for tooltips
-    CREATURE_TYPEFLAGS_UNK4             = 0x00000008,
-    CREATURE_TYPEFLAGS_UNK5             = 0x00000010,       // controls something in client tooltip related to creature faction
-    CREATURE_TYPEFLAGS_UNK6             = 0x00000020,       // may be sound related
-    CREATURE_TYPEFLAGS_UNK7             = 0x00000040,       // may be related to attackable / not attackable creatures with spells, used together with lua_IsHelpfulSpell/lua_IsHarmfulSpell
-    CREATURE_TYPEFLAGS_INTERACT_DEAD    = 0x00000080,       // Creature can be interacted with even if it's dead
-    CREATURE_TYPEFLAGS_HERBLOOT         = 0x00000100,       // Can be looted by herbalist
-    CREATURE_TYPEFLAGS_MININGLOOT       = 0x00000200,       // Can be looted by miner
-    CREATURE_TYPEFLAGS_UNK11            = 0x00000400,       // no idea, but it used by client
-    CREATURE_TYPEFLAGS_MOUNTED_COMBAT   = 0x00000800,       // possibility to attack and cast spells while mounted
-    CREATURE_TYPEFLAGS_CAN_ASSIST       = 0x00001000,       // Can aid any player (and group) in combat. Typically seen for escorting NPC's
-    CREATURE_TYPEFLAGS_UNK14            = 0x00002000,       // checked from calls in Lua_PetHasActionBar
-    CREATURE_TYPEFLAGS_UNK15            = 0x00004000,       // Lua_UnitGUID, client does guid_low &= 0xFF000000 if this flag is set
-    CREATURE_TYPEFLAGS_ENGINEERLOOT     = 0x00008000,       // Can be looted by engineer
-    CREATURE_TYPEFLAGS_EXOTIC           = 0x00010000,       // Can be tamed by hunter as exotic pet
-    CREATURE_TYPEFLAGS_UNK18            = 0x00020000,       // related to CreatureDisplayInfo and scaling in some way
-    CREATURE_TYPEFLAGS_SIEGE_WEAPON     = 0x00040000,       // Related to vehicle/siege weapons
-    CREATURE_TYPEFLAGS_UNK20            = 0x00080000,       // may be has something to do with missiles
-    CREATURE_TYPEFLAGS_UNK21            = 0x00100000,       // no idea, but it used by client, may be related to rendering
-    CREATURE_TYPEFLAGS_UNK22            = 0x00200000,       // may be has something to do with animation (disable animation?)
-    CREATURE_TYPEFLAGS_UNK23            = 0x00400000,       // this one probably controls some creature visual
-    CREATURE_TYPEFLAGS_SQUIRE           = 0x00800000,       // First seen in 3.2.2. Related to banner/backpack of creature/companion, used in CanInteract function by client
-    CREATURE_TYPEFLAGS_UNK25            = 0x01000000,       // pet sounds related?
-    CREATURE_TYPEFLAGS_UNK26            = 0x02000000,       // this one probably controls some creature visual
-    CREATURE_TYPEFLAGS_TREAT_AS_IN_RAID = 0x04000000,       // creature has no type, or forces creature to be considered as in party, may be related to creature assistance
-    CREATURE_TYPEFLAGS_FORCE_GOSSIP     = 0x08000000,       // used in Lua_ForceGossip
-    CREATURE_TYPEFLAGS_UNK29            = 0x10000000,       // no idea, but it used by client
-    CREATURE_TYPEFLAGS_UNK30            = 0x20000000,
-    CREATURE_TYPEFLAGS_UNK31            = 0x40000000,
-    CREATURE_TYPEFLAGS_QUEST_BOSS       = 0x80000000,       // Lua_UnitIsQuestBoss
-};
-
 enum CreatureEliteType
 {
     CREATURE_ELITE_NORMAL          = 0,
@@ -1852,7 +1816,8 @@ enum DiminishingGroup
     DIMINISHING_BANISH,
     // Other
     // Don't Diminish, but limit duration to 10s
-    DIMINISHING_LIMITONLY
+    DIMINISHING_LIMITONLY,
+    DIMINISHING_TAUNT,
 };
 
 enum InstanceResetMethod
@@ -1863,42 +1828,6 @@ enum InstanceResetMethod
     INSTANCE_RESET_GROUP_DISBAND,
     INSTANCE_RESET_GROUP_JOIN,
     INSTANCE_RESET_RESPAWN_DELAY                            // called from reset scheduler for request reset at map unload when map loaded at reset attempt for normal dungeon difficulty
-};
-
-// byte value (UNIT_FIELD_BYTES_2,3)
-enum ShapeshiftForm
-{
-    FORM_NONE               = 0x00,
-    FORM_CAT                = 0x01,
-    FORM_TREE               = 0x02,
-    FORM_TRAVEL             = 0x03,
-    FORM_AQUA               = 0x04,
-    FORM_BEAR               = 0x05,
-    FORM_AMBIENT            = 0x06,
-    FORM_GHOUL              = 0x07,
-    FORM_DIREBEAR           = 0x08,
-    FORM_STEVES_GHOUL       = 0x09,
-    FORM_THARONJA_SKELETON  = 0x0A,
-    FORM_TEST_OF_STRENGTH   = 0x0B,
-    FORM_BLB_PLAYER         = 0x0C,
-    FORM_SHADOW_DANCE       = 0x0D,
-    FORM_CREATUREBEAR       = 0x0E,
-    FORM_CREATURECAT        = 0x0F,
-    FORM_GHOSTWOLF          = 0x10,
-    FORM_BATTLESTANCE       = 0x11,
-    FORM_DEFENSIVESTANCE    = 0x12,
-    FORM_BERSERKERSTANCE    = 0x13,
-    FORM_TEST               = 0x14,
-    FORM_ZOMBIE             = 0x15,
-    FORM_METAMORPHOSIS      = 0x16,
-    FORM_UNDEAD             = 0x19,
-    FORM_FRENZY             = 0x1A,
-    FORM_FLIGHT_EPIC        = 0x1B,
-    FORM_SHADOW             = 0x1C,
-    FORM_FLIGHT             = 0x1D,
-    FORM_STEALTH            = 0x1E,
-    FORM_MOONKIN            = 0x1F,
-    FORM_SPIRITOFREDEMPTION = 0x20,
 };
 
 enum ShapeshiftFlags
@@ -2066,36 +1995,6 @@ enum BanReturn
     BAN_SYNTAX_ERROR,
     BAN_NOTFOUND
 };
-
-// indexes of BattlemasterList.dbc
-enum BattleGroundTypeId
-{
-    BATTLEGROUND_TYPE_NONE     = 0,
-    BATTLEGROUND_AV            = 1,
-    BATTLEGROUND_WS            = 2,
-    BATTLEGROUND_AB            = 3,
-    BATTLEGROUND_NA            = 4,
-    BATTLEGROUND_BE            = 5,
-    BATTLEGROUND_AA            = 6,                         // all arenas
-    BATTLEGROUND_EY            = 7,
-    BATTLEGROUND_RL            = 8,
-    BATTLEGROUND_SA            = 9,
-    BATTLEGROUND_DS            = 10,
-    BATTLEGROUND_RV            = 11,
-    BATTLEGROUND_IC            = 30,
-    BATTLEGROUND_RB            = 32                         // random battleground
-};
-#define MAX_BATTLEGROUND_TYPE_ID 33
-
-enum ArenaType
-{
-    ARENA_TYPE_NONE         = 0,                            // used for mark non-arenas or problematic cases
-    ARENA_TYPE_2v2          = 2,
-    ARENA_TYPE_3v3          = 3,
-    ARENA_TYPE_5v5          = 5
-};
-
-inline bool IsArenaTypeValid(ArenaType type) { return type == ARENA_TYPE_2v2 || type == ARENA_TYPE_3v3 || type == ARENA_TYPE_5v5; }
 
 enum MailResponseType
 {

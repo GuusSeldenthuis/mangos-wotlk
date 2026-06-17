@@ -25,8 +25,8 @@ EndScriptData */
 // - will intro mobs, not sent to center, despawn when phase 2 start?
 // - what happens if raid fail, can they start the event as soon after as they want?
 
-#include "AI/ScriptDevAI/base/BossAI.h"
 #include "AI/ScriptDevAI/include/sc_common.h"
+#include "AI/ScriptDevAI/base/BossAI.h"
 #include "naxxramas.h"
 
 enum
@@ -119,39 +119,39 @@ static const uint32 phaseOneAdds[] = {NPC_SOLDIER_FROZEN, NPC_UNSTOPPABLE_ABOM, 
 // List which spell must be used at which point in phase 1 to summon a given NPC type
 static const std::vector<std::vector<uint32>> soulWeaverSpellsTimers
 {
-        {1,   SPELL_SUMMON_PERIODIC_C_1},   // 1 for 40 sec
-        {42,  SPELL_SUMMON_PERIODIC_C_4},   // 1 for 20 sec
-        {63,  SPELL_SUMMON_PERIODIC_C_3},   // 3 for 90 sec
-        {154, SPELL_SUMMON_PERIODIC_C_5},   // 9 for 135 sec
-        {290, 0}                            // Total: 14 Soul Weavers
+    {1,   SPELL_SUMMON_PERIODIC_C_1},   // 1 for 40 sec
+    {42,  SPELL_SUMMON_PERIODIC_C_4},   // 1 for 20 sec
+    {63,  SPELL_SUMMON_PERIODIC_C_3},   // 3 for 90 sec
+    {154, SPELL_SUMMON_PERIODIC_C_5},   // 9 for 135 sec
+    {290, 0}                            // Total: 14 Soul Weavers
 };
 
 static const std::vector<std::vector<uint32>> unstoppableAbominationSpellsTimers
 {
-        {15,  SPELL_SUMMON_PERIODIC_B_1},   // 2 for 60 sec
-        {76,  SPELL_SUMMON_PERIODIC_B_2},   // 2 for 50 sec
-        {127, SPELL_SUMMON_PERIODIC_B_3},   // 5 for 100 sec
-        {228, SPELL_SUMMON_PERIODIC_B_4},   // 3 for 45 sec
-        {259, SPELL_SUMMON_PERIODIC_B_5},   // 2 for 20 sec
-        {291, 0}                            // Total: 14 Unstoppable Abominations
+    {15,  SPELL_SUMMON_PERIODIC_B_1},   // 2 for 60 sec
+    {76,  SPELL_SUMMON_PERIODIC_B_2},   // 2 for 50 sec
+    {127, SPELL_SUMMON_PERIODIC_B_3},   // 5 for 100 sec
+    {228, SPELL_SUMMON_PERIODIC_B_4},   // 3 for 45 sec
+    {259, SPELL_SUMMON_PERIODIC_B_5},   // 2 for 20 sec
+    {291, 0}                            // Total: 14 Unstoppable Abominations
 };
 
 static const std::vector<std::vector<uint32>> soldierFrozenWasteSpellsTimers
 {
-        {7,   SPELL_SUMMON_PERIODIC_A_1},   // 13 for 65 secs
-        {73,  SPELL_SUMMON_PERIODIC_A_2},   // 15 for 60 secs
-        {134, SPELL_SUMMON_PERIODIC_A_3},   // 18 for 54 secs
-        {189, SPELL_SUMMON_PERIODIC_A_4},   // 27 for 54 secs
-        {244, SPELL_SUMMON_PERIODIC_A_5},   // 47 for 47 secs
-        {292, 0}                            // Total: 120 Soldiers of the Frozen Wastes
+    {7,   SPELL_SUMMON_PERIODIC_A_1},   // 13 for 65 secs
+    {73,  SPELL_SUMMON_PERIODIC_A_2},   // 15 for 60 secs
+    {134, SPELL_SUMMON_PERIODIC_A_3},   // 18 for 54 secs
+    {189, SPELL_SUMMON_PERIODIC_A_4},   // 27 for 54 secs
+    {244, SPELL_SUMMON_PERIODIC_A_5},   // 47 for 47 secs
+    {292, 0}                            // Total: 120 Soldiers of the Frozen Wastes
 };
 
 // List all spells used to summon a given NPC type during phase 1
 static const std::map<uint32, std::vector<uint32>> summoningSpells
 {
-        {NPC_SOUL_WEAVER,      {SPELL_SUMMON_PERIODIC_C_1, SPELL_SUMMON_PERIODIC_C_2, SPELL_SUMMON_PERIODIC_C_3, SPELL_SUMMON_PERIODIC_C_4, SPELL_SUMMON_PERIODIC_C_5}},
-        {NPC_UNSTOPPABLE_ABOM, {SPELL_SUMMON_PERIODIC_B_1, SPELL_SUMMON_PERIODIC_B_2, SPELL_SUMMON_PERIODIC_B_3, SPELL_SUMMON_PERIODIC_B_4, SPELL_SUMMON_PERIODIC_B_5}},
-        {NPC_SOLDIER_FROZEN,   {SPELL_SUMMON_PERIODIC_A_1, SPELL_SUMMON_PERIODIC_A_2, SPELL_SUMMON_PERIODIC_A_3, SPELL_SUMMON_PERIODIC_A_4, SPELL_SUMMON_PERIODIC_A_5}}
+    {NPC_SOUL_WEAVER,      {SPELL_SUMMON_PERIODIC_C_1, SPELL_SUMMON_PERIODIC_C_2, SPELL_SUMMON_PERIODIC_C_3, SPELL_SUMMON_PERIODIC_C_4, SPELL_SUMMON_PERIODIC_C_5}},
+    {NPC_UNSTOPPABLE_ABOM, {SPELL_SUMMON_PERIODIC_B_1, SPELL_SUMMON_PERIODIC_B_2, SPELL_SUMMON_PERIODIC_B_3, SPELL_SUMMON_PERIODIC_B_4, SPELL_SUMMON_PERIODIC_B_5}},
+    {NPC_SOLDIER_FROZEN,   {SPELL_SUMMON_PERIODIC_A_1, SPELL_SUMMON_PERIODIC_A_2, SPELL_SUMMON_PERIODIC_A_3, SPELL_SUMMON_PERIODIC_A_4, SPELL_SUMMON_PERIODIC_A_5}}
 };
 
 static float M_F_ANGLE = 0.2f;                              // to adjust for map rotation
@@ -176,11 +176,8 @@ const Position centerRoomKT(3716.f, -5106.f, 141.f);
 
 struct boss_kelthuzadAI : public BossAI
 {
-    boss_kelthuzadAI(Creature* creature) : BossAI(creature, KELTHUZAD_ACTIONS_MAX),
-        m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData())),
-        m_isRegularMode(creature->GetMap()->IsRegularDifficulty()),
-        m_uiGuardiansCountMax(m_isRegularMode ? 2 : 4),
-        m_summonTicks(0)
+    boss_kelthuzadAI(Creature* creature) : BossAI(creature, KELTHUZAD_ACTIONS_MAX), m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData())), m_isRegularMode(creature->GetMap()->IsRegularDifficulty()),
+        m_uiGuardiansCountMax(m_isRegularMode ? 2 : 4), m_summonTicks(0)
     {
         SetDataType(TYPE_KELTHUZAD);
         AddOnKillText(SAY_SLAY1, SAY_SLAY2);
@@ -206,6 +203,7 @@ struct boss_kelthuzadAI : public BossAI
     uint32 m_summonTicks;
     std::map<ObjectGuid, GuidVector> m_introMobsList;
     GuidList m_summoningTriggers;
+    // TODO: Guardians should flee
     GuidVector m_guardians;
 
     void Reset() override
@@ -221,47 +219,41 @@ struct boss_kelthuzadAI : public BossAI
         m_uiPhase               = PHASE_INTRO;
 
         // it may be some spell should be used instead, to control the intro phase
-        SetCombatScriptStatus(true);
+        SetCombatScriptStatus(false);
         m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING | UNIT_FLAG_UNINTERACTIBLE);
         m_creature->CastStop();
         SetCombatMovement(false);
     }
 
-    void KilledUnit(Unit* victim) override
-    {
-        if (victim->GetTypeId() != TYPEID_PLAYER)
-            return;
-
-        if (urand(0, 1))
-            DoScriptText(urand(0, 1) ? SAY_SLAY1 : SAY_SLAY2, m_creature);
-    }
-
-    void JustDied(Unit* /*killer*/) override
+    void JustDied(Unit* killer) override
     {
         DoScriptText(SAY_DEATH, m_creature);
         DespawnGuids(m_guardians);
-
-        if (m_instance)
-            m_instance->SetData(TYPE_KELTHUZAD, DONE);
+        BossAI::JustDied(killer);
     }
 
     void EnterEvadeMode() override
     {
         DespawnIntroCreatures();
-        DespawnGuids(m_guardians);
 
-        if (m_instance)
-            m_instance->SetData(TYPE_KELTHUZAD, NOT_STARTED);
+        m_creature->InterruptNonMeleeSpells(false);
 
-        m_creature->SetRespawnDelay(30, true);
-        m_creature->ForcedDespawn();
+        if (m_creature->HasAura(SPELL_CHANNEL_VISUAL))
+        {
+            m_creature->RemoveAurasDueToSpell(SPELL_CHANNEL_VISUAL);
+            m_creature->RemoveAurasDueToSpell(SPELL_CHANNEL_VISUAL_EFFECT);
+        }
+
+        BossAI::EnterEvadeMode();
     }
 
     void Aggro(Unit* enemy) override
     {
+        BossAI::Aggro(enemy);
         DoScriptText(SAY_SUMMON_MINIONS, m_creature);
         m_summonTicks = 0;
         DoCastSpellIfCan(nullptr, SPELL_CHANNEL_VISUAL);
+        SetCombatScriptStatus(true);
     }
 
     void MoveInLineOfSight(Unit* who) override
@@ -473,7 +465,7 @@ struct boss_kelthuzadAI : public BossAI
             summoned->SetInCombatWithZone();
     }
 
-    void OnSpellCast(SpellEntry const* spellInfo, Unit* target) override
+    void OnSpellCast(SpellEntry const* spellInfo, Unit* /*target*/) override
     {
         switch (spellInfo->Id)
         {
@@ -517,7 +509,10 @@ struct boss_kelthuzadAI : public BossAI
     }
 };
 
-// Summon one add (which type depends on spell)
+// 28415 - Summon Type A Trigger
+// 28416 - Summon Type B Trigger
+// 28417 - Summon Type C Trigger
+// 28455 - Summon Type D Trigger
 struct TriggerKTAdd : public SpellScript
 {
     bool OnCheckTarget(const Spell* /*spell*/, Unit* target, SpellEffectIndex /*eff*/) const override
@@ -529,6 +524,7 @@ struct TriggerKTAdd : public SpellScript
 
     void OnEffectExecute(Spell* spell, SpellEffectIndex /* effIdx */) const override
     {
+        // Summon one add (which type depends on spell)
         if (Unit* unitTarget = spell->GetUnitTarget())
         {
             uint32 summonId = 0;
@@ -564,11 +560,12 @@ struct TriggerKTAdd : public SpellScript
     }
 };
 
-// Select four random players plus the main tank and mind control them all. Evil.
+// 28408 - Chains of Kel'Thuzad
 struct ChainsKelThuzad : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex /* effIdx */) const override
     {
+        // Select four random players plus the main tank and mind control them all. Evil.
         Unit* caster = spell->GetCaster();
 
         SelectAttackingTargetParams chainsParams;
@@ -597,7 +594,7 @@ struct ChainsKelThuzad : public SpellScript
     }
 };
 
-// Do damage onto the player equal to 26% of his/her full hit points on every tick
+// 27808 - Frost Blast
 struct FrostBlast : public AuraScript
 {
     void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& /* data */) const override
@@ -606,11 +603,10 @@ struct FrostBlast : public AuraScript
         if (!caster)
             return;
 
-        if (Unit* target = aura->GetTarget())
-        {
-            int32 basePointsDamage = target->GetMaxHealth() * 26 / 100;
-            caster->CastCustomSpell(target, SPELL_FROST_BLAST_DAMAGE, &basePointsDamage, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);
-        }
+        // Do damage onto the player equal to 26% of his/her full hit points on every tick
+        Unit* target = aura->GetTarget();
+        int32 basePointsDamage = target->GetMaxHealth() * 26 / 100;
+        caster->CastCustomSpell(target, SPELL_FROST_BLAST_DAMAGE, &basePointsDamage, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);
     }
 };
 

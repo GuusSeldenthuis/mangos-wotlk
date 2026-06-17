@@ -66,6 +66,8 @@
 #include "Globals/CombatCondition.h"
 #include "World/WorldStateExpression.h"
 
+#include "MotionGenerators/MoveMap.h"
+
 #ifdef BUILD_AHBOT
 #include "AuctionHouseBot/AuctionHouseBot.h"
 
@@ -836,7 +838,10 @@ bool ChatHandler::HandleReloadItemRequiredTragetCommand(char* /*args*/)
 bool ChatHandler::HandleReloadBattleEventCommand(char* /*args*/)
 {
     sLog.outString("Re-Loading BattleGround Eventindexes...");
-    sBattleGroundMgr.LoadBattleEventIndexes();
+    sBattleGroundMgr.GetMessager().AddMessage([](BattleGroundMgr* mgr)
+    {
+        mgr->LoadBattleEventIndexes(true);
+    });
     SendGlobalSysMessage("DB table `gameobject_battleground` and `creature_battleground` reloaded.");
     return true;
 }
@@ -1295,9 +1300,9 @@ bool ChatHandler::HandleAchievementCommand(char* args)
 
     CompletedAchievementData const* completed = target ? target->GetAchievementMgr().GetCompleteData(achId) : nullptr;
 
-    ShowAchievementListHelper(achEntry, loc, completed ? &completed->date : nullptr, target);
+    ShowAchievementListHelper(achEntry, loc, completed ? &completed->updateDate : nullptr, target);
 
-    if (AchievementCriteriaEntryList const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
+    if (AchievementCriteriaEntryVector const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
     {
         SendSysMessage(LANG_COMMAND_ACHIEVEMENT_CRITERIA);
         for (auto itr : *criteriaList)
@@ -1329,7 +1334,7 @@ bool ChatHandler::HandleAchievementAddCommand(char* args)
 
     AchievementMgr& mgr = target->GetAchievementMgr();
 
-    if (AchievementCriteriaEntryList const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
+    if (AchievementCriteriaEntryVector const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
     {
         for (auto itr : *criteriaList)
         {
@@ -1345,7 +1350,7 @@ bool ChatHandler::HandleAchievementAddCommand(char* args)
 
     LocaleConstant loc = GetSessionDbcLocale();
     CompletedAchievementData const* completed = target ? target->GetAchievementMgr().GetCompleteData(achId) : nullptr;
-    ShowAchievementListHelper(achEntry, loc, completed ? &completed->date : nullptr, target);
+    ShowAchievementListHelper(achEntry, loc, completed ? &completed->updateDate : nullptr, target);
     return true;
 }
 
@@ -1371,13 +1376,13 @@ bool ChatHandler::HandleAchievementRemoveCommand(char* args)
 
     AchievementMgr& mgr = target->GetAchievementMgr();
 
-    if (AchievementCriteriaEntryList const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
+    if (AchievementCriteriaEntryVector const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
         for (auto itr : *criteriaList)
             mgr.SetCriteriaProgress(itr, achEntry, 0, AchievementMgr::PROGRESS_SET);
 
     LocaleConstant loc = GetSessionDbcLocale();
     CompletedAchievementData const* completed = target ? target->GetAchievementMgr().GetCompleteData(achId) : nullptr;
-    ShowAchievementListHelper(achEntry, loc, completed ? &completed->date : nullptr, target);
+    ShowAchievementListHelper(achEntry, loc, completed ? &completed->updateDate : nullptr, target);
     return true;
 }
 
@@ -3259,7 +3264,7 @@ bool ChatHandler::HandleLookupQuestCommand(char* args)
     ObjectMgr::QuestMap const& qTemplates = sObjectMgr.GetQuestTemplates();
     for (const auto& qTemplate : qTemplates)
     {
-        Quest* qinfo = qTemplate.second;
+        Quest* qinfo = qTemplate.second.get();
 
         std::string title;                                  // "" for avoid repeating check default locale
         sObjectMgr.GetQuestLocaleStrings(qinfo->GetQuestId(), loc_idx, &title);
@@ -3531,10 +3536,7 @@ bool ChatHandler::HandleGuildUninviteCommand(char* args)
         return false;
 
     if (targetGuild->DelMember(target_guid))
-    {
         targetGuild->Disband();
-        delete targetGuild;
-    }
 
     return true;
 }
@@ -3599,7 +3601,6 @@ bool ChatHandler::HandleGuildDeleteCommand(char* args)
         return false;
 
     targetGuild->Disband();
-    delete targetGuild;
 
     return true;
 }
@@ -4131,6 +4132,7 @@ bool ChatHandler::HandleNpcInfoCommand(char* /*args*/)
     PSendSysMessage("Spell Lists %s ID %u", spellList.Disabled ? "disabled" : "enabled", spellList.Id);
 
     PSendSysMessage("Combat Timer: %u Leashing disabled: %s", target->GetCombatManager().GetCombatTimer(), target->GetCombatManager().IsLeashingDisabled() ? "true" : "false");
+    PSendSysMessage("Accumulated diff: %u NextUpdateTime: %u", target->GetAccumulatedUpdateDiff(), target->GetNextUpdateTime());
 
     PSendSysMessage("Combat Script: %s", target->AI()->GetCombatScriptStatus() ? "true" : "false");
     PSendSysMessage("Movementflags: %u", target->m_movementInfo.moveFlags);
@@ -7228,7 +7230,10 @@ bool ChatHandler::HandleSendMessageCommand(char* args)
 
 bool ChatHandler::HandleArenaFlushPointsCommand(char* /*args*/)
 {
-    sBattleGroundMgr.DistributeArenaPoints();
+    sBattleGroundMgr.GetMessager().AddMessage([](BattleGroundMgr* mgr)
+    {
+        mgr->DistributeArenaPoints();
+    });
     return true;
 }
 
@@ -7241,7 +7246,10 @@ bool ChatHandler::HandleArenaSeasonRewardsCommand(char* args)
     if (seasonId > 4 || seasonId == 0)
         return false;
 
-    sBattleGroundMgr.RewardArenaSeason(seasonId);
+    sBattleGroundMgr.GetMessager().AddMessage([seasonId](BattleGroundMgr* mgr)
+    {
+        mgr->RewardArenaSeason(seasonId);
+    });
     return true;
 }
 
@@ -7255,7 +7263,10 @@ bool ChatHandler::HandleArenaDataReset(char* args)
     }
 
     PSendSysMessage("Resetting all arena data.");
-    sBattleGroundMgr.ResetAllArenaData();
+    sBattleGroundMgr.GetMessager().AddMessage([](BattleGroundMgr* mgr)
+    {
+        mgr->ResetAllArenaData();
+    });
     return true;
 }
 

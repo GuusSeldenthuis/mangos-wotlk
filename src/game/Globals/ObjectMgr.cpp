@@ -47,8 +47,8 @@
 #include "OutdoorPvP/OutdoorPvPMgr.h"
 #include "OutdoorPvP/OutdoorPvP.h"
 #include "World/WorldState.h"
+#include "MotionGenerators/MoveMap.h"
 
-#include <limits>
 #include "Entities/ItemEnchantmentMgr.h"
 #include "Loot/LootMgr.h"
 
@@ -138,6 +138,11 @@ bool SpellClickInfo::IsFitToRequirements(Player const* player, Creature const* c
     return true;
 }
 
+bool SpellClickInfo::HasConditionalSpellClick() const
+{
+    return conditionId || questStart || questEnd;
+}
+
 template<typename T>
 T IdGenerator<T>::Generate()
 {
@@ -172,9 +177,6 @@ ObjectMgr::ObjectMgr() :
 
 ObjectMgr::~ObjectMgr()
 {
-    for (auto& mQuestTemplate : mQuestTemplates)
-        delete mQuestTemplate.second;
-
     for (auto& i : petInfo)
         delete[] i.second;
 
@@ -221,11 +223,19 @@ ArenaTeam* ObjectMgr::GetArenaTeamById(uint32 arenateamid) const
     return nullptr;
 }
 
+bool ichar_equals(char a, char b)
+{
+    return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+}
+
 ArenaTeam* ObjectMgr::GetArenaTeamByName(const std::string& arenateamname) const
 {
     for (const auto& itr : mArenaTeamMap)
-        if (itr.second->GetName() == arenateamname)
+    {
+        std::string const& teamName = itr.second->GetName();
+        if (std::equal(teamName.begin(), teamName.end(), arenateamname.begin(), arenateamname.end(), ichar_equals))
             return itr.second;
+    }
 
     return nullptr;
 }
@@ -753,6 +763,8 @@ void ObjectMgr::LoadCreatureTemplates()
             sLog.outErrorDb("Table creature_template entry %u StringID2 %u does not exist. Setting to 0.", cInfo->Entry, cInfo->StringID2);
             const_cast<CreatureInfo*>(cInfo)->StringID2 = 0;
         }
+        if (cInfo->StaticFlags || cInfo->StaticFlags2 || cInfo->StaticFlags3 || cInfo->StaticFlags4)
+            const_cast<CreatureInfo*>(cInfo)->TypeFlags = GetTypeFlagsFromStaticFlags(CreatureTypeFlags(cInfo->TypeFlags), cInfo->StaticFlags, cInfo->StaticFlags2, cInfo->StaticFlags3, cInfo->StaticFlags4);
     }
 
     sLog.outString(">> Loaded %u creature definitions", sCreatureStorage.GetRecordCount());
@@ -1038,6 +1050,80 @@ VehicleSeatParameters const* ObjectMgr::GetVehicleSeatParameters(uint32 seatEntr
     return &itr->second;
 }
 
+uint32 ObjectMgr::GetTypeFlagsFromStaticFlags(CreatureTypeFlags typeFlags, uint32 staticFlags1, uint32 staticFlags2, uint32 staticFlags3, uint32 staticFlags4) const
+{
+    if (staticFlags1 & uint32(CreatureStaticFlags::TAMEABLE))
+        typeFlags |= CreatureTypeFlags::TAMEABLE;
+    if (staticFlags1 & uint32(CreatureStaticFlags::BOSS_MOB))
+        typeFlags |= CreatureTypeFlags::BOSS_MOB;
+    if (staticFlags1 & uint32(CreatureStaticFlags::VISIBLE_TO_GHOSTS))
+        typeFlags |= CreatureTypeFlags::VISIBLE_TO_GHOSTS;
+    if (staticFlags1 & uint32(CreatureStaticFlags::NO_FACTION_TOOLTIP))
+        typeFlags |= CreatureTypeFlags::NO_FACTION_TOOLTIP;
+    if (staticFlags1 & uint32(CreatureStaticFlags::DO_NOT_PLAY_WOUND_ANIM))
+        typeFlags |= CreatureTypeFlags::DO_NOT_PLAY_WOUND_ANIM;
+    if (staticFlags1 & uint32(CreatureStaticFlags::MORE_AUDIBLE))
+        typeFlags |= CreatureTypeFlags::MORE_AUDIBLE;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::SPELL_ATTACKABLE))
+        typeFlags |= CreatureTypeFlags::SPELL_ATTACKABLE;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::INTERACT_WHILE_DEAD))
+        typeFlags |= CreatureTypeFlags::INTERACT_WHILE_DEAD;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::SKIN_WITH_HERBALISM))
+        typeFlags |= CreatureTypeFlags::SKIN_WITH_HERBALISM;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::SKIN_WITH_MINING))
+        typeFlags |= CreatureTypeFlags::SKIN_WITH_MINING;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::ALLOW_MOUNTED_COMBAT))
+        typeFlags |= CreatureTypeFlags::ALLOW_MOUNTED_COMBAT;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::NO_DEATH_MESSAGE))
+        typeFlags |= CreatureTypeFlags::NO_DEATH_MESSAGE;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::CAN_ASSIST))
+        typeFlags |= CreatureTypeFlags::CAN_ASSIST;
+    if (staticFlags2 & uint32(CreatureStaticFlags2::NO_PET_BAR))
+        typeFlags |= CreatureTypeFlags::NO_PET_BAR;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::MASK_UID))
+        typeFlags |= CreatureTypeFlags::MASK_UID;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::SKIN_WITH_ENGINEERING))
+        typeFlags |= CreatureTypeFlags::SKIN_WITH_ENGINEERING;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::TAMEABLE_EXOTIC))
+        typeFlags |= CreatureTypeFlags::TAMEABLE_EXOTIC;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::NO_NAME_PLATE))
+        typeFlags |= CreatureTypeFlags::NO_NAME_PLATE;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::USE_MODEL_COLLISION_SIZE))
+        typeFlags |= CreatureTypeFlags::USE_MODEL_COLLISION_SIZE;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::ALLOW_INTERACTION_WHILE_IN_COMBAT))
+        typeFlags |= CreatureTypeFlags::ALLOW_INTERACTION_WHILE_IN_COMBAT;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::COLLIDE_WITH_MISSILES))
+        typeFlags |= CreatureTypeFlags::COLLIDE_WITH_MISSILES;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::DO_NOT_PLAY_MOUNTED_ANIMATIONS))
+        typeFlags |= CreatureTypeFlags::DO_NOT_PLAY_MOUNTED_ANIMATIONS;
+    if (staticFlags3 & uint32(CreatureStaticFlags3::LINK_ALL))
+        typeFlags |= CreatureTypeFlags::LINK_ALL;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::INTERACT_ONLY_WITH_CREATOR))
+        typeFlags |= CreatureTypeFlags::INTERACT_ONLY_WITH_CREATOR;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::DO_NOT_PLAY_UNIT_EVENT_SOUNDS))
+        typeFlags |= CreatureTypeFlags::DO_NOT_PLAY_UNIT_EVENT_SOUNDS;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::HAS_NO_SHADOW_BLOB))
+        typeFlags |= CreatureTypeFlags::HAS_NO_SHADOW_BLOB;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS))
+        typeFlags |= CreatureTypeFlags::TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::FORCE_GOSSIP))
+        typeFlags |= CreatureTypeFlags::FORCE_GOSSIP;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::DO_NOT_SHEATHE))
+        typeFlags |= CreatureTypeFlags::DO_NOT_SHEATHE;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::DO_NOT_TARGET_ON_INTERACTION))
+        typeFlags |= CreatureTypeFlags::DO_NOT_TARGET_ON_INTERACTION;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::DO_NOT_RENDER_OBJECT_NAME))
+        typeFlags |= CreatureTypeFlags::DO_NOT_RENDER_OBJECT_NAME;
+    if (staticFlags4 & uint32(CreatureStaticFlags4::QUEST_BOSS))
+        typeFlags |= CreatureTypeFlags::QUEST_BOSS;
+    return uint32(typeFlags);
+}
+
+bool ObjectMgr::IsSpellUsedInCondition(uint32 spellId) const
+{
+    return m_spellsUsedInSpellClickConditions.find(spellId) != m_spellsUsedInSpellClickConditions.end();
+}
+
 CreatureImmunityVector const* ObjectMgr::GetCreatureImmunitySet(uint32 entry, uint32 setId) const
 {
     auto itr = m_creatureImmunities.find(entry);
@@ -1279,7 +1365,7 @@ void ObjectMgr::LoadSpawnGroups()
     std::shared_ptr<SpawnGroupEntryContainer> newContainer = std::make_shared<SpawnGroupEntryContainer>();
     uint32 count = 0;
 
-    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT Id, Name, Type, MaxCount, WorldState, WorldStateExpression, Flags, StringId FROM spawn_group"));
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT Id, Name, Type, MaxCount, WorldState, WorldStateExpression, Flags, StringId, RespawnOverrideMin, RespawnOverrideMax FROM spawn_group"));
     if (result)
     {
         do
@@ -1335,10 +1421,15 @@ void ObjectMgr::LoadSpawnGroups()
             }
 
             entry.Active = false;
+            entry.Large = false;
             entry.EnabledByDefault = true;
-            entry.formationEntry = nullptr;
+            entry.Formation = nullptr;
             entry.HasChancedSpawns = false;
-            newContainer->spawnGroupMap.emplace(entry.Id, entry);
+            if (!fields[8].IsNULL())
+                entry.RespawnOverrideMin = fields[8].GetUInt32();
+            if (!fields[9].IsNULL())
+                entry.RespawnOverrideMax = fields[9].GetUInt32();
+            newContainer->spawnGroupMap.emplace(entry.Id, std::move(entry));
         } while (result->NextRow());
     }
 
@@ -1349,31 +1440,31 @@ void ObjectMgr::LoadSpawnGroups()
         {
             Field* fields = result->Fetch();
 
-            FormationEntrySPtr fEntry = std::make_shared<FormationEntry>();
-            fEntry->GroupId = fields[0].GetUInt32();
+            FormationEntry fEntry;
+            fEntry.GroupId = fields[0].GetUInt32();
             uint32 fType = fields[1].GetUInt32();
-            fEntry->Spread = fields[2].GetFloat();
-            fEntry->Options = fields[3].GetUInt32();
-            fEntry->MovementIdOrWander = fields[4].GetUInt32();
-            fEntry->MovementType = fields[5].GetUInt32();
-            fEntry->Comment = fields[6].GetCppString();
+            fEntry.Spread = fields[2].GetFloat();
+            fEntry.Options = fields[3].GetUInt32();
+            fEntry.MovementIdOrWander = fields[4].GetUInt32();
+            fEntry.MovementType = fields[5].GetUInt32();
+            fEntry.Comment = fields[6].GetCppString();
 
-            auto itr = newContainer->spawnGroupMap.find(fEntry->GroupId);
+            auto itr = newContainer->spawnGroupMap.find(fEntry.GroupId);
             if (itr == newContainer->spawnGroupMap.end())
             {
-                sLog.outErrorDb("LoadSpawnGroups: Invalid group Id:%u found in `spawn_group_formation`. Skipping.", fEntry->GroupId);
+                sLog.outErrorDb("LoadSpawnGroups: Invalid group Id:%u found in `spawn_group_formation`. Skipping.", fEntry.GroupId);
                 continue;
             }
 
             if (fType >= static_cast<uint32>(SPAWN_GROUP_FORMATION_TYPE_COUNT))
             {
-                sLog.outErrorDb("LoadSpawnGroups: Invalid formation type in `spawn_group_formation` ID:%u. Skipping.", fEntry->GroupId);
+                sLog.outErrorDb("LoadSpawnGroups: Invalid formation type in `spawn_group_formation` ID:%u. Skipping.", fEntry.GroupId);
                 continue;
             }
 
-            if (fEntry->MovementType >= static_cast<uint32>(MAX_DB_MOTION_TYPE))
+            if (fEntry.MovementType >= static_cast<uint32>(MAX_DB_MOTION_TYPE))
             {
-                sLog.outErrorDb("LoadSpawnGroups: Invalid movement type in `spawn_group_formation` ID:%u. Skipping.", fEntry->GroupId);
+                sLog.outErrorDb("LoadSpawnGroups: Invalid movement type in `spawn_group_formation` ID:%u. Skipping.", fEntry.GroupId);
                 continue;
             }
 
@@ -1388,15 +1479,15 @@ void ObjectMgr::LoadSpawnGroups()
 //                 }
 //             }
 
-            fEntry->Type = static_cast<SpawnGroupFormationType>(fType);
+            fEntry.Type = static_cast<SpawnGroupFormationType>(fType);
 
-            if (fEntry->Spread > 15.0f || fEntry->Spread < -15)
+            if (fEntry.Spread > 15.0f || fEntry.Spread < -15)
             {
-                sLog.outErrorDb("LoadSpawnGroups: Invalid spread value (%5.2f) should be between (-15..15) in formation ID:%u . Skipping.", fEntry->Spread, fEntry->GroupId);
+                sLog.outErrorDb("LoadSpawnGroups: Invalid spread value (%5.2f) should be between (-15..15) in formation ID:%u . Skipping.", fEntry.Spread, fEntry.GroupId);
                 continue;
             }
 
-            itr->second.formationEntry = std::move(fEntry);
+            itr->second.Formation = std::make_unique<FormationEntry>(std::move(fEntry));
         } while (result->NextRow());
     }
 
@@ -1479,7 +1570,7 @@ void ObjectMgr::LoadSpawnGroups()
         // check and fix correctness of slot id indexation
         for (auto& sg : newContainer->spawnGroupMap)
         {
-            if (sg.second.formationEntry == nullptr)
+            if (sg.second.Formation == nullptr)
                 continue;
 
             auto& guidMap = sg.second.DbGuids;
@@ -1576,6 +1667,46 @@ void ObjectMgr::LoadSpawnGroups()
         } while (result->NextRow());
     }
 
+    result = WorldDatabase.Query("SELECT Id, SquadId, Guid, Entry FROM spawn_group_squad");
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 Id = fields[0].GetUInt32();
+
+            uint32 squadId = fields[1].GetUInt32();
+            uint32 dbGuid = fields[2].GetUInt32();
+            uint32 entry = fields[3].GetUInt32();
+
+            auto itr = newContainer->spawnGroupMap.find(Id);
+            if (itr == newContainer->spawnGroupMap.end())
+            {
+                sLog.outErrorDb("LoadSpawnGroups: Invalid spawn_group_squad Id %u. Skipping.", Id);
+                continue;
+            }
+
+            auto& spawnGroup = itr->second;
+            if (!spawnGroup.RandomEntries.empty())
+                sLog.outErrorDb("LoadSpawnGroups: spawn_group_squad Id %u has spawn_group_entry. Will be overriden by squad", Id);
+
+            auto squadItr = std::find_if(spawnGroup.Squads.begin(), spawnGroup.Squads.end(), [squadId](const SpawnGroupSquad& obj) -> bool { return obj.SquadId == squadId; });
+
+            if (squadItr == spawnGroup.Squads.end())
+            {
+                SpawnGroupSquad squad;
+                squad.SquadId = squadId;
+                squad.GuidToEntry.emplace(dbGuid, entry);
+                spawnGroup.Squads.push_back(std::move(squad));
+            }
+            else
+            {
+                squadItr->GuidToEntry.emplace(dbGuid, entry);
+            }
+        }
+        while (result->NextRow());
+    }
+
     for (auto& data : newContainer->spawnGroupMap)
     {
         SpawnGroupEntry& entry = data.second;
@@ -1588,7 +1719,7 @@ void ObjectMgr::LoadSpawnGroups()
                 maxRandom += randomEntry.MaxCount;
                 if (randomEntry.Chance == 0)
                     maxCount = true;
-            }                
+            }
             if (maxCount)
                 entry.MaxCount = entry.DbGuids.size();
             else
@@ -1614,15 +1745,22 @@ void ObjectMgr::LoadSpawnGroups()
                 auto& creatureDynguidsForMap = m_dynguidCreatureDbGuids[data->mapid];
                 creatureDynguidsForMap.erase(std::remove(creatureDynguidsForMap.begin(), creatureDynguidsForMap.end(), guidData.DbGuid), creatureDynguidsForMap.end());
                 newContainer->spawnGroupByGuidMap.emplace(std::make_pair(guidData.DbGuid, uint32(TYPEID_UNIT)), &entry);
-                if (sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE))
+                bool actives = sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE);
+                bool specials = sWorld.getConfig(CONFIG_BOOL_SPECIALS_ACTIVE);
+                if (actives || specials)
                 {
                     for (auto& data : entry.RandomEntries)
                     {
                         if (CreatureInfo const* cinfo = GetCreatureTemplate(data.Entry))
                         {
-                            if ((cinfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE) != 0)
+                            if (actives && (cinfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE) != 0)
                             {
                                 entry.Active = true;
+                                break;
+                            }
+                            else if (specials && cinfo->IsLargeOrBiggerCreature())
+                            {
+                                entry.Large = true;
                                 break;
                             }
                         }
@@ -1642,15 +1780,22 @@ void ObjectMgr::LoadSpawnGroups()
                 auto& goDynguidsForMap = m_dynguidGameobjectDbGuids[data->mapid];
                 goDynguidsForMap.erase(std::remove(goDynguidsForMap.begin(), goDynguidsForMap.end(), guidData.DbGuid), goDynguidsForMap.end());
                 newContainer->spawnGroupByGuidMap.emplace(std::make_pair(guidData.DbGuid, uint32(TYPEID_GAMEOBJECT)), &entry);
-                if (sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE))
+                bool actives = sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE);
+                bool specials = sWorld.getConfig(CONFIG_BOOL_SPECIALS_ACTIVE);
+                if (actives || specials)
                 {
                     for (auto& data : entry.RandomEntries)
                     {
-                        if (CreatureInfo const* cinfo = GetCreatureTemplate(data.Entry))
+                        if (GameObjectInfo const* goInfo = GetGameObjectInfo(data.Entry))
                         {
-                            if ((cinfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE) != 0)
+                            if (actives && (goInfo->ExtraFlags & GAMEOBJECT_EXTRA_FLAG_ACTIVE) != 0)
                             {
                                 entry.Active = true;
+                                break;
+                            }
+                            else if (specials && goInfo->IsLargeOrBiggerGameObject())
+                            {
+                                entry.Large = true;
                                 break;
                             }
                         }
@@ -2347,6 +2492,8 @@ void ObjectMgr::LoadCreatures()
 
             if (sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE) && cInfo && cInfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE)
                 m_activeCreatures.emplace(data.mapid, guid);
+            else if (sWorld.getConfig(CONFIG_BOOL_SPECIALS_ACTIVE) && cInfo && cInfo->IsLargeOrBiggerCreature())
+                m_largeCreatures.emplace(data.mapid, guid);
         }
 
         // reset the entry to 0; this will be processed by Creature::GetCreatureConditionalSpawnEntry
@@ -2589,6 +2736,8 @@ void ObjectMgr::LoadGameObjects()
 
             if (sWorld.getConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE) && gInfo && gInfo->ExtraFlags & GAMEOBJECT_EXTRA_FLAG_ACTIVE)
                 m_activeGameObjects.emplace(data.mapid, guid);
+            else if (sWorld.getConfig(CONFIG_BOOL_SPECIALS_ACTIVE) && gInfo && gInfo->IsLargeOrBiggerGameObject())
+                m_largeGameObjects.emplace(data.mapid, guid);
         }
 
         ++count;
@@ -4807,7 +4956,7 @@ void ObjectMgr::LoadGroups()
                  "(SELECT COUNT(*) FROM character_instance WHERE guid = group_instance.leaderGuid AND instance = group_instance.instance AND permanent = 1 LIMIT 1), "
                  // 7              8
                  " `groups`.groupId, instance.encountersMask "
-                 "FROM group_instance LEFT JOIN instance ON instance = id LEFT JOIN `groups` ON `groups`.leaderGUID = group_instance.leaderGUID ORDER BY leaderGuid"
+                 "FROM group_instance LEFT JOIN instance ON instance = id LEFT JOIN `groups` ON `groups`.leaderGUID = group_instance.leaderGUID ORDER BY group_instance.leaderGuid"
              );
 
     if (!queryResult)
@@ -4871,9 +5020,6 @@ void ObjectMgr::LoadGroups()
 void ObjectMgr::LoadQuests()
 {
     // For reload case
-    for (QuestMap::const_iterator itr = mQuestTemplates.begin(); itr != mQuestTemplates.end(); ++itr)
-        delete itr->second;
-
     mQuestTemplates.clear();
 
     m_ExclusiveQuestGroups.clear();
@@ -4918,8 +5064,8 @@ void ObjectMgr::LoadQuests()
                           "IncompleteEmote, IncompleteEmoteDelay, CompleteEmote, CompleteEmoteDelay, OfferRewardEmote1, OfferRewardEmote2, OfferRewardEmote3, OfferRewardEmote4,"
                           //   137                     138                     139                     140
                           "OfferRewardEmoteDelay1, OfferRewardEmoteDelay2, OfferRewardEmoteDelay3, OfferRewardEmoteDelay4,"
-                          //   141          142          143             144              145              146              147              148                149                   150
-                          "StartScript, CompleteScript, RewMaxRepValue1, RewMaxRepValue2, RewMaxRepValue3, RewMaxRepValue4, RewMaxRepValue5, RequiredCondition, BreadcrumbForQuestId, MaxLevel "
+                          //   141          142          143             144              145              146              147              148                149                   150       151              152     153
+                          "StartScript, CompleteScript, RewMaxRepValue1, RewMaxRepValue2, RewMaxRepValue3, RewMaxRepValue4, RewMaxRepValue5, RequiredCondition, BreadcrumbForQuestId, MaxLevel, RewFactionFlags, RewUnk, RewArenaPoints "
 
                           " FROM quest_template");
     if (!queryResult)
@@ -4943,7 +5089,8 @@ void ObjectMgr::LoadQuests()
         Field* fields = queryResult->Fetch();
 
         Quest* newQuest = new Quest(fields);
-        mQuestTemplates[newQuest->GetQuestId()] = newQuest;
+        auto itr = mQuestTemplates.try_emplace(newQuest->GetQuestId(), newQuest).first;
+        newQuest->m_weakRef = itr->second;
     }
     while (queryResult->NextRow());
 
@@ -4953,7 +5100,7 @@ void ObjectMgr::LoadQuests()
 
     for (auto& mQuestTemplate : mQuestTemplates)
     {
-        Quest* qinfo = mQuestTemplate.second;
+        Quest* qinfo = mQuestTemplate.second.get();
 
         // additional quest integrity checks (GO, creature_template and item_template must be loaded already)
 
@@ -5533,7 +5680,7 @@ void ObjectMgr::LoadQuests()
     // Prevent any breadcrumb loops, and inform target quests of their breadcrumbs
     for (auto& mQuestTemplate : mQuestTemplates)
     {
-        Quest* qinfo = mQuestTemplate.second;
+        Quest* qinfo = mQuestTemplate.second.get();
         uint32   qid = qinfo->GetQuestId();
         uint32 breadcrumbForQuestId = qinfo->BreadcrumbForQuestId;
         std::set<uint32> questSet;
@@ -6036,7 +6183,7 @@ void ObjectMgr::LoadConditions()
 
     for (auto& mQuestTemplate : mQuestTemplates) // needs to be checked after loading conditions
     {
-        Quest* qinfo = mQuestTemplate.second;
+        Quest* qinfo = mQuestTemplate.second.get();
 
         if (qinfo->RequiredCondition)
         {
@@ -6511,6 +6658,81 @@ void ObjectMgr::LoadTrainerGreetingLocales()
 
     sLog.outString(">> Loaded %u locales trainer greetings.", uint32(m_trainerGreetingLocaleMap.size()));
     sLog.outString();
+}
+
+void ObjectMgr::GenerateZoneAndAreaIds()
+{
+    WorldDatabase.DirectExecute("TRUNCATE creature_zone");
+    WorldDatabase.DirectExecute("TRUNCATE gameobject_zone");
+
+    std::string baseCreature = "INSERT INTO creature_zone(Guid, ZoneId, AreaId, WmoGroupId) VALUES";
+    int i = 0;
+    int total = 0;
+    std::string query = "";
+    std::vector<uint32> skipMapIds =
+    {
+        582, 584, 586, 587, 588, 589, 590, 591, 592, 593, 594, 596, 610, 612, 613, 614, 620, 621, 622, 623, 641, 642, 647, 672, 673, 712, 713, 718
+    };
+    for (auto& data : mCreatureDataMap)
+    {
+        CreatureData const& creature = data.second;
+        uint32 zoneId, areaId;
+        int32 wmoGroupId = 0;
+        if (std::find(skipMapIds.begin(), skipMapIds.end(), creature.mapid) != skipMapIds.end())
+            continue;
+
+        TerrainInfo* info = sTerrainMgr.LoadTerrain(creature.mapid);
+        MMAP::MMapFactory::createOrGetMMapManager()->loadMapInstance(sWorld.GetDataPath(), creature.mapid, 0);
+        CellPair p = MaNGOS::ComputeCellPair(creature.posX, creature.posY);
+        Cell cell(p);
+        GridPair gp(cell.GridX(), cell.GridY());
+        int gx = (MAX_NUMBER_OF_GRIDS - 1) - gp.x_coord;
+        int gy = (MAX_NUMBER_OF_GRIDS - 1) - gp.y_coord;
+        info->LoadMapAndVMap(gx, gy);
+        info->GetZoneAndAreaId(zoneId, areaId, creature.posX, creature.posY, creature.posZ, &wmoGroupId);
+
+        query += "(" + std::to_string(data.first) + "," + std::to_string(zoneId) + "," + std::to_string(areaId) + "," + std::to_string(wmoGroupId) + "),";
+        ++i; ++total;
+        if (i >= 100)
+        {
+            std::string finalQuery = baseCreature + query;
+            finalQuery[finalQuery.length() - 1] = ';';
+            WorldDatabase.DirectExecute(finalQuery.c_str());
+            query = "";
+            i = 0;
+        }
+    }
+
+    std::string baseGo = "INSERT INTO gameobject_zone(Guid, ZoneId, AreaId, WmoGroupId) VALUES";
+    for (auto& data : mGameObjectDataMap)
+    {
+        GameObjectData const& go = data.second;
+        uint32 zoneId, areaId;
+        int32 wmoGroupId = 0;
+        if (std::find(skipMapIds.begin(), skipMapIds.end(), go.mapid) != skipMapIds.end())
+            continue;
+
+        TerrainInfo* info = sTerrainMgr.LoadTerrain(go.mapid);
+        MMAP::MMapFactory::createOrGetMMapManager()->loadMapInstance(sWorld.GetDataPath(), go.mapid, 0);
+        CellPair p = MaNGOS::ComputeCellPair(go.posX, go.posY);
+        Cell cell(p);
+        GridPair gp(cell.GridX(), cell.GridY());
+        int gx = (MAX_NUMBER_OF_GRIDS - 1) - gp.x_coord;
+        int gy = (MAX_NUMBER_OF_GRIDS - 1) - gp.y_coord;
+        info->LoadMapAndVMap(gx, gy);
+        info->GetZoneAndAreaId(zoneId, areaId, go.posX, go.posY, go.posZ + 1, &wmoGroupId);
+
+        query += "(" + std::to_string(data.first) + "," + std::to_string(zoneId) + "," + std::to_string(areaId) + "," + std::to_string(wmoGroupId) + "),";
+        ++i; ++total;
+        if (i >= 100)
+        {
+            std::string finalQuery = baseGo + query;
+            finalQuery[finalQuery.length() - 1] = ';';
+            WorldDatabase.DirectExecute(finalQuery.c_str());
+            query = "";
+            i = 0;
+        }
+    }
 }
 
 // not very fast function but it is called only once a day, or on starting-up
@@ -7302,11 +7524,17 @@ void ObjectMgr::SetHighestGuids()
         m_ItemGuids.Set((*result)[0].GetUInt32() + 1);
     }
 
+    uint32 newInstanceId = 0;
     result = CharacterDatabase.Query("SELECT MAX(id) FROM instance");
     if (result)
     {
-        m_InstanceGuids.Set((*result)[0].GetUInt32() + 1);
+        newInstanceId = (*result)[0].GetUInt32() + 1;
     }
+
+    if (newInstanceId < 2) //Instance id 0 and 1 are taken by ebon hold.
+        newInstanceId = 2;
+
+    m_InstanceGuids.Set(newInstanceId);
 
     // Cleanup other tables from nonexistent guids (>=m_hiItemGuid)
     CharacterDatabase.BeginTransaction();
@@ -7378,8 +7606,11 @@ void ObjectMgr::LoadGameObjectLocales()
 
     auto queryResult = WorldDatabase.Query("SELECT entry,"
                           "name_loc1,name_loc2,name_loc3,name_loc4,name_loc5,name_loc6,name_loc7,name_loc8,"
-                          "castbarcaption_loc1,castbarcaption_loc2,castbarcaption_loc3,castbarcaption_loc4,"
-                          "castbarcaption_loc5,castbarcaption_loc6,castbarcaption_loc7,castbarcaption_loc8 FROM locales_gameobject");
+                          "opening_text_loc1,opening_text_loc2,opening_text_loc3,opening_text_loc4,"
+                          "opening_text_loc5,opening_text_loc6,opening_text_loc7,opening_text_loc8,"
+                          "closing_text_loc1,closing_text_loc2,closing_text_loc3,closing_text_loc4,"
+                          "closing_text_loc5,closing_text_loc6,closing_text_loc7,closing_text_loc8 "
+                          "FROM locales_gameobject");
 
     if (!queryResult)
     {
@@ -7408,32 +7639,60 @@ void ObjectMgr::LoadGameObjectLocales()
 
         for (int i = 1; i < MAX_LOCALE; ++i)
         {
-            std::string str = fields[i].GetCppString();
-            if (!str.empty())
+            auto& field = fields[i];
+            if (!field.IsNULL())
             {
-                int idx = GetOrNewStorageLocaleIndexFor(LocaleConstant(i));
-                if (idx >= 0)
+                std::string str = field.GetCppString();
+                if (!str.empty())
                 {
-                    if ((int32)data.Name.size() <= idx)
-                        data.Name.resize(idx + 1);
+                    int idx = GetOrNewStorageLocaleIndexFor(LocaleConstant(i));
+                    if (idx >= 0)
+                    {
+                        if ((int32)data.Name.size() <= idx)
+                            data.Name.resize(idx + 1);
 
-                    data.Name[idx] = str;
+                        data.Name[idx] = str;
+                    }
                 }
             }
         }
 
         for (int i = 1; i < MAX_LOCALE; ++i)
         {
-            std::string str = fields[i + (MAX_LOCALE - 1)].GetCppString();
-            if (!str.empty())
+            auto& field = fields[i + (MAX_LOCALE - 1)];
+            if (!field.IsNULL())
             {
-                int idx = GetOrNewStorageLocaleIndexFor(LocaleConstant(i));
-                if (idx >= 0)
+                std::string str = field.GetCppString();
+                if (!str.empty())
                 {
-                    if ((int32)data.CastBarCaption.size() <= idx)
-                        data.CastBarCaption.resize(idx + 1);
+                    int idx = GetOrNewStorageLocaleIndexFor(LocaleConstant(i));
+                    if (idx >= 0)
+                    {
+                        if ((int32)data.OpeningText.size() <= idx)
+                            data.OpeningText.resize(idx + 1);
 
-                    data.CastBarCaption[idx] = str;
+                        data.OpeningText[idx] = str;
+                    }
+                }
+            }
+        }
+
+        for (int i = 1; i < MAX_LOCALE; ++i)
+        {
+            auto& field = fields[i + (MAX_LOCALE - 1) * 2];
+            if (!field.IsNULL())
+            {
+                std::string str = field.GetCppString();
+                if (!str.empty())
+                {
+                    int idx = GetOrNewStorageLocaleIndexFor(LocaleConstant(i));
+                    if (idx >= 0)
+                    {
+                        if ((int32)data.ClosingText.size() <= idx)
+                            data.ClosingText.resize(idx + 1);
+
+                        data.ClosingText[idx] = str;
+                    }
                 }
             }
         }
@@ -8283,6 +8542,7 @@ void ObjectMgr::LoadNPCSpellClickSpells()
     uint32 count = 0;
 
     mSpellClickInfoMap.clear();
+    m_spellsUsedInSpellClickConditions.clear();
     //                                             0          1         2            3                   4          5           6
     auto queryResult = WorldDatabase.Query("SELECT npc_entry, spell_id, quest_start, quest_start_active, quest_end, cast_flags, condition_id FROM npc_spellclick_spells");
 
@@ -8329,10 +8589,17 @@ void ObjectMgr::LoadNPCSpellClickSpells()
             }
         }
 
-        if (info.conditionId && !sConditionStorage.LookupEntry<ConditionEntry const*>(info.conditionId))
+        if (info.conditionId)
         {
-            sLog.outErrorDb("Table npc_spellclick_spells references unknown condition %u. Skipping entry.", info.conditionId);
-            continue;
+            ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(info.conditionId);
+            if (!condition)
+            {
+                sLog.outErrorDb("Table npc_spellclick_spells references unknown condition %u. Skipping entry.", info.conditionId);
+                continue;
+            }
+
+            if (uint32 spellId = condition->UsesSpell())
+                m_spellsUsedInSpellClickConditions.insert(spellId);
         }
         if (!info.conditionId)                         // TODO Drop block after finished converting
         {
@@ -8594,6 +8861,16 @@ std::shared_ptr<std::map<int32, WorldStateExpressionEntry>> ObjectMgr::GetWorldS
 std::shared_ptr<std::map<int32, CombatConditionEntry>> ObjectMgr::GetCombatConditions()
 {
     return m_combatConditionMgr->Get();
+}
+
+bool ObjectMgr::ExistsWorldstateExpression(int32 Id)
+{
+    return m_worldStateExpressionMgr->Exists(Id);
+}
+
+WorldStateExpressionMgr const& ObjectMgr::GetWorldStateExpressionMgr()
+{
+    return *(m_worldStateExpressionMgr.get());
 }
 
 void ObjectMgr::DeleteCreatureData(uint32 guid)
@@ -9693,52 +9970,45 @@ void ObjectMgr::LoadTrainers(char const* tableName, bool isTemplates)
         trainerSpell.isProvidedReqLevel = trainerSpell.reqLevel > 0;
 
         // By default, lets assume the specified spell is the one we want to teach the player...
-        trainerSpell.learnedSpell = spell;
+        trainerSpell.learnedSpell.push_back(spell);
         // ...but first, lets inspect this spell...
         for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
         {
             if (spellinfo->Effect[i] == SPELL_EFFECT_LEARN_SPELL && spellinfo->EffectTriggerSpell[i])
+                trainerSpell.learnedSpell.push_back(spellinfo->EffectTriggerSpell[i]);
+        }
+
+        for (auto& learnedSpell : trainerSpell.learnedSpell)
+        {
+            // already checked as valid spell so exist.
+            SpellEntry const* learnSpellinfo = sSpellTemplate.LookupEntry<SpellEntry>(learnedSpell);
+            if (SpellMgr::IsProfessionSpell(learnedSpell))
             {
-                switch (spellinfo->EffectImplicitTargetA[i])
+                data.trainerType = 2;
+
+                uint32 minLevel = sSpellMgr.GetProfessionSpellMinLevel(learnedSpell);
+                if (trainerSpell.reqLevel)
                 {
-                    case TARGET_NONE:
-                    case TARGET_UNIT_CASTER:
-                        // ...looks like the specified spell is actually a trainer's spell casted on a player to teach another spell
-                        // Trainer's spells can teach more than one spell (up to number of effects), but we will stick to the first one
-                        // Self-casts listed in trainer's lists usually come from recipes which were made trainable in a later patch
-                        trainerSpell.learnedSpell = spellinfo->EffectTriggerSpell[i];
-                        break;
+                    if (minLevel == trainerSpell.reqLevel)
+                        ERROR_DB_STRICT_LOG("Table `%s` (Entry: %u) has redundant reqlevel %u (=prof reqlevel) for spell %u", tableName, entry, trainerSpell.reqLevel, spell);
+                    else
+                        sLog.outErrorDb("Table `%s` (Entry: %u) has wrong redundant reqlevel %u (<>prof reqlevel %u) for spell %u", tableName, entry, trainerSpell.reqLevel,
+                                        minLevel, spell);
                 }
-            }
-        }
-
-        // already checked as valid spell so exist.
-        SpellEntry const* learnSpellinfo = sSpellTemplate.LookupEntry<SpellEntry>(trainerSpell.learnedSpell);
-        if (SpellMgr::IsProfessionSpell(trainerSpell.learnedSpell))
-        {
-            data.trainerType = 2;
-
-            uint32 minLevel = sSpellMgr.GetProfessionSpellMinLevel(trainerSpell.learnedSpell);
-            if (trainerSpell.reqLevel)
-            {
-                if (minLevel == trainerSpell.reqLevel)
-                    ERROR_DB_STRICT_LOG("Table `%s` (Entry: %u) has redundant reqlevel %u (=prof reqlevel) for spell %u", tableName, entry, trainerSpell.reqLevel, spell);
                 else
-                    sLog.outErrorDb("Table `%s` (Entry: %u) has wrong redundant reqlevel %u (<>prof reqlevel %u) for spell %u", tableName, entry, trainerSpell.reqLevel, minLevel, spell);
+                    trainerSpell.reqLevel = minLevel;
             }
+            // for non-prof. spell use spellLevel if not provided any
             else
-                trainerSpell.reqLevel = minLevel;
-        }
-        // for non-prof. spell use spellLevel if not provided any
-        else
-        {
-            if (trainerSpell.reqLevel)
             {
-                if (trainerSpell.reqLevel == learnSpellinfo->spellLevel)
-                    ERROR_DB_STRICT_LOG("Table `%s` (Entry: %u) has redundant reqlevel %u (=spell level) for spell %u", tableName, entry, trainerSpell.reqLevel, spell);
+                if (trainerSpell.reqLevel)
+                {
+                    if (trainerSpell.reqLevel == learnSpellinfo->spellLevel)
+                        ERROR_DB_STRICT_LOG("Table `%s` (Entry: %u) has redundant reqlevel %u (=spell level) for spell %u", tableName, entry, trainerSpell.reqLevel, spell);
+                }
+                else
+                    trainerSpell.reqLevel = learnSpellinfo->spellLevel;
             }
-            else
-                trainerSpell.reqLevel = learnSpellinfo->spellLevel;
         }
 
         if (trainerSpell.conditionId)
@@ -9905,6 +10175,26 @@ void ObjectMgr::LoadActiveEntities(Map* _map)
     }
 
     // Load Transports on Map _map
+}
+
+void ObjectMgr::LoadLargeEntities(Map* _map)
+{
+    if (sWorld.isForceLoadMap(_map->GetId())) // handled by active
+        return;
+
+    auto bounds = m_largeCreatures.equal_range(_map->GetId());
+    for (auto itr = bounds.first; itr != bounds.second; ++itr)
+    {
+        CreatureData const& data = mCreatureDataMap[itr->second];
+        _map->ForceLoadGrid(data.posX, data.posY);
+    }
+
+    bounds = m_largeGameObjects.equal_range(_map->GetId());
+    for (auto itr = bounds.first; itr != bounds.second; ++itr)
+    {
+        GameObjectData const& data = mGameObjectDataMap[itr->second];
+        _map->ForceLoadGrid(data.posX, data.posY);
+    }
 }
 
 void ObjectMgr::LoadNpcGossips()
@@ -10560,7 +10850,7 @@ void ObjectMgr::LoadCreatureTemplateSpells(std::shared_ptr<CreatureSpellListCont
                 spell.ScriptId = 0;
                 spell.DisabledForAI = !spellInfo || spellInfo->HasAttribute(SPELL_ATTR_EX_NO_AUTOCAST_AI);
                 spells.emplace(i, spell);
-            }            
+            }
         } while (result->NextRow());
     }
 
@@ -10781,13 +11071,13 @@ bool DoDisplayText(WorldObject* source, int32 entry, Unit const* target, uint32 
         {
             case CHAT_TYPE_ZONE_YELL:
             case CHAT_TYPE_ZONE_EMOTE:
-                source->PlayDirectSound(sound, PlayPacketParameters(PLAY_ZONE, source->GetZoneId()));
+                source->PlayDirectSound(sound, PlayPacketParameters(PlayPacketSettings::ZONE, source->GetZoneId()));
                 break;
             case CHAT_TYPE_WHISPER:
             case CHAT_TYPE_BOSS_WHISPER:
                 // An error will be displayed for the text
                 if (target && target->GetTypeId() == TYPEID_PLAYER)
-                    source->PlayDirectSound(sound, PlayPacketParameters(PLAY_TARGET, (Player const*)target));
+                    source->PlayDirectSound(sound, PlayPacketParameters(PlayPacketSettings::TARGET, (Player const*)target));
                 break;
             default:
                 source->PlayDirectSound(sound);

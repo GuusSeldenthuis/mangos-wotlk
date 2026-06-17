@@ -24,6 +24,7 @@ EndScriptData */
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "shadow_labyrinth.h"
 #include "Spells/Scripts/SpellScript.h"
+#include "World/WorldStateDefines.h"
 
 /* Shadow Labyrinth encounters:
 1 - Ambassador Hellmaw event
@@ -40,6 +41,21 @@ instance_shadow_labyrinth::instance_shadow_labyrinth(Map* pMap) : ScriptedInstan
 void instance_shadow_labyrinth::Initialize()
 {
     memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
+
+    // Worldstates for correct grouping
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_01, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_05, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_12, urand(0, 2));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_13, urand(0, 2));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_23, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_24, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_25, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_33, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_34, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_35, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_40, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_41, urand(0, 1));
+    instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_42, urand(0, 1));
 }
 
 void instance_shadow_labyrinth::OnObjectCreate(GameObject* pGo)
@@ -169,6 +185,57 @@ void instance_shadow_labyrinth::OnCreatureRespawn(Creature* creature)
     {
         case NPC_HELLMAW:
             creature->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, creature, creature);
+            break;
+    }
+}
+
+// The Screaming Hall 
+// All Worldstates get Activated via database when door opens
+void instance_shadow_labyrinth::OnCreatureGroupDespawn(CreatureGroup* group, Creature* /*pCreature*/)
+{
+
+    switch (group->GetGroupId())
+    {
+        // Blackheart the Inciter room
+        // All groups have a chance to spawn assasins
+        case SL_BLACKHEAT_GROUP_01:
+        case SL_BLACKHEAT_GROUP_02:
+        case SL_BLACKHEAT_GROUP_03:
+        case SL_BLACKHEAT_GROUP_04:
+        case SL_BLACKHEAT_GROUP_05:
+        case SL_BLACKHEAT_GROUP_06:
+        case SL_BLACKHEAT_GROUP_07:
+        case SL_BLACKHEAT_GROUP_08:
+        case SL_BLACKHEAT_GROUP_09:
+        case SL_BLACKHEAT_GROUP_10:
+        case SL_BLACKHEAT_GROUP_11:
+        case SL_BLACKHEAT_GROUP_12:
+        {
+            switch (urand(0, 5))
+            {
+                case 0:
+                instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_ASSASIN_01, 1);
+            }
+            
+            switch (urand(0, 5))
+            {
+                case 0:
+                instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_ASSASIN_02, 1);
+            }
+            break;
+        }
+        // Murmur Room
+        case SL_SPAWN_GROUP_043:
+            instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_49, 0);
+            break;
+        case SL_SPAWN_GROUP_044:
+            instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_50, 0);
+            break;
+        case SL_SPAWN_GROUP_045:
+            instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_51, 0);
+            break;
+        case SL_SPAWN_GROUP_046:
+            instance->GetVariableManager().SetVariable(WORLD_STATE_SHADOW_LAB_GROUP_52, 0);
             break;
     }
 }

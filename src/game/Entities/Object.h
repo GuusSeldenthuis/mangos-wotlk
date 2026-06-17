@@ -33,6 +33,7 @@
 #include "PlayerDefines.h"
 #include "Entities/ObjectVisibility.h"
 #include "Grids/Cell.h"
+#include "Util/UniqueTrackablePtr.h"
 #include "Utilities/EventProcessor.h"
 
 #include <set>
@@ -63,13 +64,13 @@ enum PhaseMasks
     PHASEMASK_ANYWHERE = 0xFFFFFFFF
 };
 
-enum PlayPacketSettings
+enum class PlayPacketSettings
 {
-    PLAY_SET,
-    PLAY_TARGET,
-    PLAY_MAP,
-    PLAY_ZONE,
-    PLAY_AREA,
+    SET,
+    TARGET,
+    MAP,
+    ZONE,
+    AREA,
 };
 
 enum DistanceCalculation
@@ -119,8 +120,6 @@ class ChatHandler;
 struct SpellEntry;
 class Spell;
 class GenericTransport;
-
-typedef std::unordered_map<Player*, UpdateData> UpdateDataMapType;
 
 // Spell cooldown flags sent in SMSG_SPELL_COOLDOWN
 enum SpellCooldownFlags
@@ -389,22 +388,9 @@ class Object
         virtual ~Object();
 
         const bool& IsInWorld() const { return m_inWorld; }
-        virtual void AddToWorld()
-        {
-            if (m_inWorld)
-                return;
+        virtual void AddToWorld();
 
-            m_inWorld = true;
-
-            // synchronize values mirror with values array (changes will send in updatecreate opcode any way
-            ClearUpdateMask(false);                         // false - we can't have update data in update queue before adding to world
-        }
-        virtual void RemoveFromWorld()
-        {
-            // if we remove from world then sending changes not required
-            ClearUpdateMask(true);
-            m_inWorld = false;
-        }
+        virtual void RemoveFromWorld();
 
         ObjectGuid const& GetObjectGuid() const { return GetGuidValue(OBJECT_FIELD_GUID); }
         uint32 GetGUIDLow() const { return GetObjectGuid().GetCounter(); }
@@ -427,22 +413,22 @@ class Object
         uint8 GetTypeMask() const { return m_objectType; }
         bool isType(TypeMask mask) const { return (mask & m_objectType) != 0; }
 
-        virtual void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const;
-        void SendCreateUpdateToPlayer(Player* player) const;
+        virtual void BuildCreateUpdateBlockForPlayer(UpdateData& data, Player* target) const;
 
         // must be overwrite in appropriate subclasses (WorldObject, Item currently), or will crash
         virtual void AddToClientUpdateList();
         virtual void RemoveFromClientUpdateList();
-        virtual void BuildUpdateData(UpdateDataMapType& update_players);
+        virtual void UpdateVisibility(UpdateDataMapType& update_players) = 0;
+        virtual void BuildUpdateData(UpdateDataMapType& update_players) = 0;
         void MarkForClientUpdate();
         void SendForcedObjectUpdate();
 
         void BuildValuesUpdateBlockForPlayer(UpdateData& data, Player* target) const;
         void BuildValuesUpdateBlockForPlayerWithFlags(UpdateData& data, Player* target, UpdateFieldFlags flags) const;
         void BuildValuesUpdateBlockForPlayer(UpdateData& data, UpdateMask& updateMask, Player* target) const;
-        void BuildForcedValuesUpdateBlockForPlayer(UpdateData* data, Player* target) const;
-        void BuildOutOfRangeUpdateBlock(UpdateData* data) const;
-        void BuildMovementUpdateBlock(UpdateData* data, uint16 flags = 0) const;
+        void BuildForcedValuesUpdateBlockForPlayer(UpdateData& data, Player* target) const;
+        void BuildOutOfRangeUpdateBlock(UpdateData& data) const;
+        void BuildMovementUpdateBlock(UpdateData& data, uint16 flags = 0) const;
 
         virtual void DestroyForPlayer(Player* target, bool anim = false) const;
 
@@ -484,6 +470,13 @@ class Object
             return *(((uint16*)&m_uint32Values[ index ]) + offset);
         }
 
+        int16 GetInt16Value(uint16 index, uint8 offset) const
+        {
+            MANGOS_ASSERT(index < m_valuesCount || PrintIndexError(index, false));
+            MANGOS_ASSERT(offset < 2);
+            return *(((uint16*)&m_uint32Values[index]) + offset);
+        }
+
         ObjectGuid const& GetGuidValue(uint16 index) const { return *reinterpret_cast<ObjectGuid const*>(&GetUInt64Value(index)); }
 
         void SetInt32Value(uint16 index,        int32  value);
@@ -508,6 +501,7 @@ class Object
         }
 
         void ForceValuesUpdateAtIndex(uint16 index);
+        void ForceValuesUpdateForFlag(uint16 flag);
         void MarkUpdateFieldsWithFlagForUpdate(UpdateMask& updateMask, uint16 flag) const;
 
         void SetFlag(uint16 index, uint32 newFlag);
@@ -631,6 +625,7 @@ class Object
         virtual bool HasQuest(uint32 /* quest_id */) const { return false; }
         virtual bool HasInvolvedQuest(uint32 /* quest_id */) const { return false; }
         void SetItsNewObject(bool enable) { m_itsNewObject = enable; }
+        bool ItsNewObject() const { return m_itsNewObject; }
 
         Loot* m_loot;
 
@@ -639,6 +634,13 @@ class Object
         inline bool IsUnit() const { return isType(TYPEMASK_UNIT); }
         inline bool IsGameObject() const { return GetTypeId() == TYPEID_GAMEOBJECT; }
         inline bool IsCorpse() const { return GetTypeId() == TYPEID_CORPSE; }
+
+        MaNGOS::unique_weak_ptr<Object> GetWeakPtr() const { return m_scriptRef; }
+
+        static void BuildOutOfRangeDataForPlayer(Player* pl, UpdateDataMapType& update_players, ObjectGuid oorObject);
+        void BuildCreateDataForPlayer(Player* pl, UpdateDataMapType& update_players, bool auras = true) const;
+
+        void SetUpdateFlag(ObjectUpdateFlags flag, bool add);
 
     protected:
         Object();
@@ -683,13 +685,16 @@ class Object
 
         uint32 m_dbGuid;
 
+        struct NoopObjectDeleter { void operator()(Object*) const { /*noop - not managed*/ } };
+        MaNGOS::unique_trackable_ptr<Object> m_scriptRef;
+
     public:
         // for output helpfull error messages from ASSERTs
         bool PrintIndexError(uint32 index, bool set) const;
         bool PrintEntryError(char const* descr) const;
 };
 
-struct WorldObjectChangeAccumulator;
+struct WorldObjectCreateAccumulator;
 
 struct TempSpawnSettings
 {
@@ -833,11 +838,12 @@ class MovementInfo
 {
     public:
         MovementInfo() : moveFlags(MOVEFLAG_NONE), moveFlags2(MOVEFLAG2_NONE), ctime(0), stime(0),
-            t_time(0), t_seat(-1), t_time2(0), s_pitch(0.0f), fallTime(0), u_unk1(0.0f) {}
+            t_time(0), t_seat(-1), t_time2(0), s_pitch(0.0f), fallTime(0), stepUpStartElevation(0.0f) {}
 
         // Read/Write methods
         void Read(ByteBuffer& data);
         void Write(ByteBuffer& data) const;
+        uint32 GetSerializedSize() const;
 
         // Movement flags manipulations
         void AddMovementFlag(MovementFlags f) { moveFlags |= f; }
@@ -847,6 +853,7 @@ class MovementInfo
         void SetMovementFlags(MovementFlags f) { moveFlags = f; }
         MovementFlags2 GetMovementFlags2() const { return MovementFlags2(moveFlags2); }
         void AddMovementFlags2(MovementFlags2 f) { moveFlags2 |= f; }
+        bool HasMovementFlag(MovementFlags2 f) const { return (moveFlags2 & f) != 0; }
 
         // Deduce speed type by current movement flags:
         inline UnitMoveType GetSpeedType() const { return GetSpeedType(MovementFlags(moveFlags)); }
@@ -927,7 +934,7 @@ class MovementInfo
         // jumping
         JumpInfo jump;
         // spline
-        float    u_unk1;
+        float    stepUpStartElevation; // sent by client when colliding and moving over tall obstacles, likely to avoid moving into terrain visually
 };
 
 inline ByteBuffer& operator<< (ByteBuffer& buf, MovementInfo const& mi)
@@ -945,10 +952,10 @@ inline ByteBuffer& operator>> (ByteBuffer& buf, MovementInfo& mi)
 
 class WorldObject : public Object
 {
-        friend struct WorldObjectChangeAccumulator;
+        friend struct WorldObjectCreateAccumulator;
 
     public:
-        virtual ~WorldObject() {}
+        virtual ~WorldObject() override;
 
         virtual void Update(const uint32 /*diff*/);
         virtual void Heartbeat() {}
@@ -1137,10 +1144,10 @@ class WorldObject : public Object
         void MonsterWhisper(const char* text, Unit const* target, bool IsBossWhisper = false) const;
         void MonsterText(std::vector<std::string> content, uint32 type, Language lang, Unit const* target) const;
 
-        void PlayDistanceSound(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PLAY_SET)) const;
-        void PlayDirectSound(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PLAY_SET)) const;
-        void PlayMusic(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PLAY_SET)) const;
-        void PlaySpellVisual(uint32 artKitId, PlayPacketParameters parameters = PlayPacketParameters(PLAY_SET)) const;
+        void PlayDistanceSound(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PlayPacketSettings::SET)) const;
+        void PlayDirectSound(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PlayPacketSettings::SET)) const;
+        void PlayMusic(uint32 sound_id, PlayPacketParameters parameters = PlayPacketParameters(PlayPacketSettings::SET)) const;
+        void PlaySpellVisual(uint32 artKitId, PlayPacketParameters parameters = PlayPacketParameters(PlayPacketSettings::SET)) const;
         void HandlePlayPacketSettings(WorldPacket& msg, PlayPacketParameters& parameters) const;
 
         void SendObjectDeSpawnAnim(ObjectGuid guid) const;
@@ -1156,8 +1163,8 @@ class WorldObject : public Object
 
         virtual void SaveRespawnTime() {}
         void AddObjectToRemoveList();
+        bool m_inRemoveList;
 
-        void UpdateObjectVisibility();
         virtual void UpdateVisibilityAndView();             // update visibility for object and object for all around
 
         // main visibility check function in normal case (ignore grey zone distance check)
@@ -1177,6 +1184,7 @@ class WorldObject : public Object
         void AddToClientUpdateList() override;
         void RemoveFromClientUpdateList() override;
         void BuildUpdateData(UpdateDataMapType&) override;
+        void UpdateVisibility(UpdateDataMapType& update_players) override;
         
         static Creature* SummonCreature(TempSpawnSettings settings, Map* map, uint32 phaseMask);
         Creature* SummonCreature(uint32 id, float x, float y, float z, float ang, TempSpawnType spwtype, uint32 despwtime, bool asActiveObject = false, bool setRun = false, uint32 pathId = 0, uint32 faction = 0, uint32 modelId = 0, bool spawnCounting = false, bool forcedOnTop = false);
@@ -1227,6 +1235,14 @@ class WorldObject : public Object
         VisibilityData const& GetVisibilityData() const { return m_visibilityData; }
         VisibilityData& GetVisibilityData() { return m_visibilityData; }
 
+        virtual uint32 GetNextUpdateTime() { return m_nextUpdateTime; }
+        virtual void SetNextUpdateTime(uint32 time) { m_nextUpdateTime = time; }
+        virtual void UpdateNextUpdateTime() {}
+        uint32 GetAccumulatedUpdateDiff() { return m_accumulatedUpdateDiff; }
+        void ResetAccumulatedUpdateDiff() { m_accumulatedUpdateDiff = 0; }
+
+        virtual uint32 ShouldPerformObjectUpdate(uint32 const diff);
+
         bool HaveDebugFlag(CMDebugFlags flag) const { return (uint64(m_debugFlags) & flag) != 0; }
         void SetDebugFlag(CMDebugFlags flag) { m_debugFlags |= uint64(flag); }
         void ClearDebugFlag(CMDebugFlags flag) { m_debugFlags &= ~(uint64(flag)); }
@@ -1261,6 +1277,8 @@ class WorldObject : public Object
         void RemoveClientIAmAt(Player const* player);
         GuidSet& GetClientGuidsIAmAt() { return m_clientGUIDsIAmAt; }
 
+        void DestroyOnClientsIAmAt();
+
         // Event handler
         EventProcessor m_events;
 
@@ -1280,6 +1298,8 @@ class WorldObject : public Object
 
         bool HasStringId(uint32 stringId) const; // not to be used in sd2
         void SetStringId(uint32 stringId, bool apply); // not to be used outside of scriptmgr
+
+        virtual uint32 GetRespawnDelay() const { return 0; }
 
     protected:
         explicit WorldObject();
@@ -1308,6 +1328,9 @@ class WorldObject : public Object
 
         VisibilityData m_visibilityData;
 
+        uint32 m_nextUpdateTime;
+        uint32 m_accumulatedUpdateDiff;
+
         ShortTimeTracker m_heartBeatTimer;
     private:
         Map* m_currMap;                                     // current object's Map location
@@ -1321,6 +1344,7 @@ class WorldObject : public Object
         bool m_isActiveObject;
         uint64 m_debugFlags;
 
+        GuidVector m_pendingViewers;                        // list of players that spotted me this map tick
         GuidSet m_clientGUIDsIAmAt;
 
         // Spell System compliance

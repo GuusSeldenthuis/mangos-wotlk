@@ -141,8 +141,8 @@ enum WSGameObjects
 
 enum WSAchievCriteria
 {
-    WS_TIMED_ACHIEV_QUICK_CAP_A         = 61266,
-    WS_TIMED_ACHIEV_QUICK_CAP_H         = 61265,
+    SPELL_WS_TIMED_ACHIEV_QUICK_CAP_A   = 61266,
+    SPELL_WS_TIMED_ACHIEV_QUICK_CAP_H   = 61265,
     WS_TIMED_ACHIEV_WARSONG_EXP         = 8563,
 
     WS_ACHIEV_SAVE_THE_DAY_1            = 5605,
@@ -200,7 +200,6 @@ class BattleGroundWGScore : public BattleGroundScore
 {
     public:
         BattleGroundWGScore() : flagCaptures(0), flagReturns(0) {};
-        virtual ~BattleGroundWGScore() {};
 
         uint32 GetAttr1() const override { return flagCaptures; }
         uint32 GetAttr2() const override { return flagReturns; }

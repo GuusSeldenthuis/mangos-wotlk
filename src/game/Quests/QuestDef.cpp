@@ -43,7 +43,7 @@ Quest::Quest(Field* questRecord)
     RequiredMaxRepValue = questRecord[15].GetInt32();
     SuggestedPlayers = questRecord[16].GetUInt32();
     LimitTime = questRecord[17].GetUInt32();
-    m_QuestFlags = questRecord[18].GetUInt16();
+    m_QuestFlags = questRecord[18].GetUInt32();
     m_SpecialFlags = questRecord[19].GetUInt16();
     CharTitleId = questRecord[20].GetUInt32();
     PlayersSlain = questRecord[21].GetUInt32();
@@ -152,6 +152,10 @@ Quest::Quest(Field* questRecord)
         RewMaxRepValue[i] = questRecord[143 + i].GetInt32();
 
     RequiredCondition = questRecord[148].GetUInt32();
+
+    RewFactionFlags = questRecord[151].GetUInt32();
+    RewUnkField = questRecord[152].GetUInt32();
+    RewArenaPoints = questRecord[153].GetUInt32();
 
     m_isActive = true;
 

@@ -24,7 +24,7 @@ CREATE TABLE `db_version` (
   `version` varchar(120) DEFAULT NULL,
   `creature_ai_version` varchar(120) DEFAULT NULL,
   `cache_id` int(10) DEFAULT '0',
-  `required_14086_01_mangos_displayid_probability` bit(1) DEFAULT NULL
+  `required_14101_01_mangos_quest_template_mistake_rename` bit(1) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Used DB version notes';
 
 --
@@ -188,6 +188,7 @@ CREATE TABLE `achievement_criteria_requirement` (
   `type` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `value1` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `value2` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `ScriptName` char(64) DEFAULT NULL,
   PRIMARY KEY (`criteria_id`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Achievment system';
 
@@ -1019,6 +1020,15 @@ LOCK TABLES `creature_addon` WRITE;
 /*!40000 ALTER TABLE `creature_addon` DISABLE KEYS */;
 /*!40000 ALTER TABLE `creature_addon` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `creature_zone`;
+CREATE TABLE `creature_zone` (
+  `Guid` int unsigned NOT NULL AUTO_INCREMENT COMMENT 'Global Unique Identifier',
+  `ZoneId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Zone Identifier',
+  `AreaId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Area Identifier',
+  `WmoGroupId` INT DEFAULT 0,
+  PRIMARY KEY(`Guid`)
+);
 
 --
 -- Table structure for table `creature_ai_scripts`
@@ -2266,6 +2276,15 @@ CREATE TABLE `gameobject_addon` (
   PRIMARY KEY(`guid`)
 );
 
+DROP TABLE IF EXISTS `gameobject_zone`;
+CREATE TABLE `gameobject_zone` (
+  `Guid` int unsigned NOT NULL AUTO_INCREMENT COMMENT 'Global Unique Identifier',
+  `ZoneId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Zone Identifier',
+  `AreaId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Area Identifier',
+  `WmoGroupId` INT DEFAULT 0,
+  PRIMARY KEY(`Guid`)
+);
+
 DROP TABLE IF EXISTS `gameobject_spawn_entry`;
 CREATE TABLE `gameobject_spawn_entry`(
 `guid` INT UNSIGNED NOT NULL COMMENT 'Gameobject table guid',
@@ -2371,8 +2390,8 @@ CREATE TABLE `gameobject_template` (
   `displayId` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `name` varchar(100) NOT NULL DEFAULT '',
   `IconName` varchar(100) NOT NULL DEFAULT '',
-  `castBarCaption` varchar(100) NOT NULL DEFAULT '',
-  `unk1` varchar(100) NOT NULL DEFAULT '',
+  `OpeningText` varchar(100) NOT NULL DEFAULT '',
+  `ClosingText` varchar(100) NOT NULL DEFAULT '',
   `faction` smallint(5) unsigned NOT NULL DEFAULT '0',
   `flags` int(10) unsigned NOT NULL DEFAULT '0',
   `ExtraFlags` int(10) unsigned NOT NULL DEFAULT '0',
@@ -3802,22 +3821,30 @@ UNLOCK TABLES;
 DROP TABLE IF EXISTS `locales_gameobject`;
 CREATE TABLE `locales_gameobject` (
   `entry` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `name_loc1` varchar(100) NOT NULL DEFAULT '',
-  `name_loc2` varchar(100) NOT NULL DEFAULT '',
-  `name_loc3` varchar(100) NOT NULL DEFAULT '',
-  `name_loc4` varchar(100) NOT NULL DEFAULT '',
-  `name_loc5` varchar(100) NOT NULL DEFAULT '',
-  `name_loc6` varchar(100) NOT NULL DEFAULT '',
-  `name_loc7` varchar(100) NOT NULL DEFAULT '',
-  `name_loc8` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc1` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc2` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc3` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc4` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc5` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc6` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc7` varchar(100) NOT NULL DEFAULT '',
-  `castbarcaption_loc8` varchar(100) NOT NULL DEFAULT '',
+  `name_loc1` varchar(100),
+  `name_loc2` varchar(100),
+  `name_loc3` varchar(100),
+  `name_loc4` varchar(100),
+  `name_loc5` varchar(100),
+  `name_loc6` varchar(100),
+  `name_loc7` varchar(100),
+  `name_loc8` varchar(100),
+  `opening_text_loc1` varchar(100),
+  `opening_text_loc2` varchar(100),
+  `opening_text_loc3` varchar(100),
+  `opening_text_loc4` varchar(100),
+  `opening_text_loc5` varchar(100),
+  `opening_text_loc6` varchar(100),
+  `opening_text_loc7` varchar(100),
+  `opening_text_loc8` varchar(100),
+  `closing_text_loc1` varchar(100),
+  `closing_text_loc2` varchar(100),
+  `closing_text_loc3` varchar(100),
+  `closing_text_loc4` varchar(100),
+  `closing_text_loc5` varchar(100),
+  `closing_text_loc6` varchar(100),
+  `closing_text_loc7` varchar(100),
+  `closing_text_loc8` varchar(100),
   PRIMARY KEY (`entry`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
@@ -13132,7 +13159,6 @@ INSERT INTO `playercreateinfo_spell` VALUES
 (2,7,9125,'Generic'),
 (2,7,20573,'Hardiness'),
 (2,7,20574,'Axe Specialization'),
-(2,7,21563,'Command'),
 (2,7,21651,'Opening'),
 (2,7,21652,'Closing'),
 (2,7,22027,'Remove Insignia'),
@@ -15855,8 +15881,11 @@ CREATE TABLE `quest_template` (
   `RewMaxRepValue3` mediumint(9) NOT NULL DEFAULT '42999',
   `RewMaxRepValue4` mediumint(9) NOT NULL DEFAULT '42999',
   `RewMaxRepValue5` mediumint(9) NOT NULL DEFAULT '42999',
+  `RewFactionFlags` INT UNSIGNED DEFAULT '0',
+  `RewUnk` INT UNSIGNED DEFAULT '0',
   `RewHonorAddition` int(10) unsigned NOT NULL DEFAULT '0',
   `RewHonorMultiplier` float NOT NULL DEFAULT '0',
+  `RewArenaPoints` INT UNSIGNED DEFAULT '0',
   `RewOrReqMoney` int(11) NOT NULL DEFAULT '0',
   `RewMoneyMaxLevel` int(10) unsigned NOT NULL DEFAULT '0',
   `RewSpell` mediumint(8) unsigned NOT NULL DEFAULT '0',
@@ -16224,6 +16253,8 @@ CREATE TABLE `spawn_group`  (
   `WorldStateExpression` int(11) NOT NULL DEFAULT 0 COMMENT 'Worldstate expression Id',
   `Flags` int(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Flags for various behaviour',
   `StringId` INT(11) UNSIGNED NOT NULL DEFAULT '0',
+  `RespawnOverrideMin` INT UNSIGNED COMMENT 'Respawn time override' DEFAULT NULL,
+  `RespawnOverrideMax` INT UNSIGNED COMMENT 'Respawn time override' DEFAULT NULL,
   PRIMARY KEY (`Id`)
 );
 
@@ -16275,6 +16306,19 @@ CREATE TABLE `spawn_group_linked_group`  (
   `Id` int(11) NOT NULL COMMENT 'Spawn Group ID',
   `LinkedId` int(11) NOT NULL COMMENT 'Linked Spawn Group ID',
   PRIMARY KEY (`Id`, `LinkedId`)
+);
+
+-- ----------------------------
+-- Table structure for spawn_group_squad
+-- ----------------------------
+
+DROP TABLE IF EXISTS spawn_group_squad;
+CREATE TABLE spawn_group_squad(
+Id INT NOT NULL COMMENT 'Spawn Group ID',
+SquadId INT NOT NULL COMMENT 'Squad Id within Spawn Group',
+Guid INT NOT NULL COMMENT 'Guid of creature or GO',
+Entry INT NOT NULL COMMENT 'Entry of creature or GO',
+PRIMARY KEY(Id, SquadId, Guid)
 );
 
 --
@@ -18694,6 +18738,21 @@ INSERT INTO `spell_elixir` VALUES
 /*!40000 ALTER TABLE `spell_elixir` ENABLE KEYS */;
 UNLOCK TABLES;
 
+DROP TABLE IF EXISTS `spell_group`;
+CREATE TABLE `spell_group`(
+  `Id` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Spell Group Identifier',
+  `Rule` smallint unsigned NOT NULL,
+  `Name` varchar(200) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NOT NULL COMMENT 'Description of usage',
+  PRIMARY KEY(`Id`)
+);
+
+DROP TABLE IF EXISTS `spell_group_spell`;
+CREATE TABLE `spell_group_spell`(
+  `Id` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Identifier',
+  `SpellId` int unsigned NOT NULL,
+  PRIMARY KEY(`Id`,`SpellId`)
+);
+
 --
 -- Table structure for table `spell_learn_spell`
 --
@@ -19981,6 +20040,7 @@ CREATE TABLE `vehicle_accessory` (
   `vehicle_entry` int(10) unsigned NOT NULL COMMENT 'entry of the npc who has some accessory as vehicle',
   `seat` mediumint(8) unsigned NOT NULL COMMENT 'onto which seat shall the passenger be boarded',
   `accessory_entry` int(10) unsigned NOT NULL COMMENT 'entry of the passenger that is to be boarded',
+  `RideSpellId` int(10) unsigned NOT NULL COMMENT 'spell id to be used for riding',
   `comment` varchar(255) NOT NULL,
   PRIMARY KEY (`vehicle_entry`,`seat`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Vehicle Accessory (passengers that are auto-boarded onto a vehicle)';

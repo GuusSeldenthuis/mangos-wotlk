@@ -36,6 +36,7 @@
 #include "Globals/Conditions.h"
 #include "Maps/SpawnGroupDefines.h"
 #include "Entities/Vehicle.h"
+#include "Util/UniqueTrackablePtr.h"
 
 #include <map>
 #include <climits>
@@ -78,6 +79,7 @@ struct SpellClickInfo
 
     // helpers
     bool IsFitToRequirements(Player const* player, Creature const* clickedCreature) const;
+    bool HasConditionalSpellClick() const;
 };
 
 typedef std::multimap<uint32 /*npcEntry*/, SpellClickInfo> SpellClickInfoMap;
@@ -516,7 +518,7 @@ class ObjectMgr
 
         typedef std::unordered_map<uint32, ArenaTeam*> ArenaTeamMap;
 
-        typedef std::unordered_map<uint32, Quest*> QuestMap;
+        typedef std::unordered_map<uint32, MaNGOS::unique_trackable_ptr<Quest>> QuestMap;
 
         typedef std::unordered_map<uint32, AreaTrigger> AreaTriggerMap;
 
@@ -584,7 +586,7 @@ class ObjectMgr
         Quest const* GetQuestTemplate(uint32 quest_id) const
         {
             QuestMap::const_iterator itr = mQuestTemplates.find(quest_id);
-            return itr != mQuestTemplates.end() ? itr->second : nullptr;
+            return itr != mQuestTemplates.end() ? itr->second.get() : nullptr;
         }
         QuestMap const& GetQuestTemplates() const { return mQuestTemplates; }
 
@@ -764,6 +766,8 @@ class ObjectMgr
         void LoadConditions();
         void LoadMailLevelRewards();
 
+        void GenerateZoneAndAreaIds();
+
         void LoadGossipText();
 
         void LoadAreaTriggerTeleports();
@@ -823,8 +827,12 @@ class ObjectMgr
         std::shared_ptr<std::map<int32, WorldStateExpressionEntry>> GetWorldStateExpressions();
         std::shared_ptr<std::map<int32, CombatConditionEntry>> GetCombatConditions();
 
+        bool ExistsWorldstateExpression(int32 Id);
+        WorldStateExpressionMgr const& GetWorldStateExpressionMgr(); // must operate statelessly
+
         /// @param _map Map* of the map for which to load active entities. If nullptr active entities on continents are loaded
         void LoadActiveEntities(Map* _map);
+        void LoadLargeEntities(Map* _map);
 
         void LoadVehicleAccessory();
         void LoadVehicleSeatParameters();
@@ -1300,6 +1308,10 @@ class ObjectMgr
 
         // Vehicles
         VehicleSeatParameters const* GetVehicleSeatParameters(uint32 seatEntry) const;
+
+        uint32 GetTypeFlagsFromStaticFlags(CreatureTypeFlags typeFlags, uint32 staticFlags1, uint32 staticFlags2, uint32 staticFlags3, uint32 staticFlags4) const;
+
+        bool IsSpellUsedInCondition(uint32 spellId) const;
     protected:
 
         // current locale settings
@@ -1428,6 +1440,8 @@ class ObjectMgr
         MapObjectGuids mMapObjectGuids;
         ActiveObjectGuidsOnMap m_activeCreatures;
         ActiveObjectGuidsOnMap m_activeGameObjects;
+        ActiveObjectGuidsOnMap m_largeCreatures;
+        ActiveObjectGuidsOnMap m_largeGameObjects;
         CreatureSpawnTemplateMap m_creatureSpawnTemplateMap;
         CreatureDataMap mCreatureDataMap;
         CreatureLocaleMap mCreatureLocaleMap;
@@ -1485,6 +1499,8 @@ class ObjectMgr
         std::map<uint32, std::vector<std::pair<TypeID, uint32>>> m_guidsForMap; // used for transports only atm
 
         std::map<uint32, VehicleSeatParameters> m_seatParameters;
+
+        std::unordered_set<uint32> m_spellsUsedInSpellClickConditions;
 };
 
 #define sObjectMgr MaNGOS::Singleton<ObjectMgr>::Instance()

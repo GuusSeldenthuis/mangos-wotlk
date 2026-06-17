@@ -28,6 +28,7 @@
 #include "Entities/Player.h"
 #include "Server/SQLStorages.h"
 #include "Spells/SpellEffectDefines.h"
+#include "Util/UniqueTrackablePtr.h"
 
 class WorldSession;
 class WorldPacket;
@@ -125,6 +126,7 @@ class SpellCastTargets
             m_unitTarget = target.m_unitTarget;
             m_itemTarget = target.m_itemTarget;
             m_GOTarget   = target.m_GOTarget;
+            m_CorpseTarget = target.m_CorpseTarget;
 
             m_unitTargetGUID    = target.m_unitTargetGUID;
             m_GOTargetGUID      = target.m_GOTargetGUID;
@@ -327,9 +329,11 @@ class SpellEvent : public BasicEvent
         virtual void Abort(uint64 e_time) override;
         virtual bool IsDeletable() const override;
 
-        Spell* GetSpell() const { return m_Spell; }
-        protected:
-        Spell* m_Spell;
+        Spell* GetSpell() const { return m_Spell.get(); }
+        MaNGOS::unique_weak_ptr<Spell> GetSpellWeakPtr() const { return m_Spell; }
+
+    protected:
+        MaNGOS::unique_trackable_ptr<Spell> m_Spell;
 };
 
 class SpellModRAII
@@ -348,7 +352,7 @@ class SpellModRAII
 class SpellCastArgs
 {
     public:
-        SpellCastArgs() : m_target(nullptr), m_scriptValue(0), m_scriptValueSet(false), m_destinationSet(false)
+        SpellCastArgs() : m_target(nullptr), m_scriptValue(0), m_scriptValueSet(false), m_destinationSet(false), m_itemSet(false), m_itemTarget(nullptr)
         {
             memset(m_basePoints, 0, sizeof(m_basePoints));
         }
@@ -385,6 +389,15 @@ class SpellCastArgs
         }
         bool IsDestinationSet() const { return m_destinationSet; }
         Position GetDestination() const { return m_destination; }
+
+        SpellCastArgs& SetItemTarget(Item* itemTarget)
+        {
+            m_itemSet = true;
+            m_itemTarget = itemTarget;
+            return *this;
+        }
+        bool IsItemTargetSet() const { return m_itemSet; }
+        Item* GetItemTarget() const { return m_itemTarget; }
     private:
         Unit* m_target;
         uint64 m_scriptValue;
@@ -392,6 +405,8 @@ class SpellCastArgs
         int32* m_basePoints[3];
         bool m_destinationSet;
         Position m_destination;
+        bool m_itemSet;
+        Item* m_itemTarget;
 };
 
 static const uint32 SPELL_INTERRUPT_NONPLAYER = 32747;
@@ -686,7 +701,7 @@ class Spell
 
             return false;
         }
-        bool IsChannelActive() const { return m_caster->GetUInt32Value(UNIT_FIELD_CHANNEL_SPELL) != 0; }
+        bool IsChannelActive() const { return m_caster && m_caster->GetUInt32Value(UNIT_FIELD_CHANNEL_SPELL) != 0; }
         bool IsMeleeAttackResetSpell() const { return !m_IsTriggeredSpell && (m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_COMBAT);  }
         bool IsRangedAttackResetSpell() const { return !m_IsTriggeredSpell && IsRangedSpell() && (m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_COMBAT); }
         bool IsEffectWithImplementedMultiplier(uint32 effectId) const;
@@ -902,8 +917,12 @@ class Spell
         void SetDamageDoneModifier(float mod, SpellEffectIndex effIdx);
         void SetIgnoreOwnerLevel(bool state) { m_ignoreOwnerLevel = state; }
         void SetUsableWhileStunned(bool state) { m_usableWhileStunned = state; }
+        void SetHelpfulThreatCoefficient(float coeff) { m_helpfulThreatCoeff = coeff; }
+
+        MaNGOS::unique_weak_ptr<Spell> GetWeakPtr() const;
+
     protected:
-        void SendLoot(ObjectGuid guid, LootType loottype, LockType lockType);
+        void SendLoot(ObjectGuid guid, LootType loottype, LockType lockType, Player* player);
         bool IgnoreItemRequirements() const;                // some item use spells have unexpected reagent data
         void UpdateOriginalCasterPointer();
 
@@ -1104,6 +1123,9 @@ class Spell
 
         // GO casting preparations
         WorldObject* m_trueCaster;
+
+        // Applies coefficient to spell_threat to helpful target
+        float m_helpfulThreatCoeff;
 };
 
 enum ReplenishType

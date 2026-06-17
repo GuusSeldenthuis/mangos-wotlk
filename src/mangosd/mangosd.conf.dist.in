@@ -47,6 +47,8 @@ ConfVersion=2024020101
 #                ---PGSQL---
 #                    hostname;port;username;password;database
 #                    .;/path/to/unix_socket/DIRECTORY or . for default path;username;password;database - use Unix sockets at Unix/Linux
+#                ---SQLITE---
+#                    /path/to/sqlite.db
 #
 #    LoginDatabaseConnections
 #    WorldDatabaseConnections
@@ -72,6 +74,10 @@ ConfVersion=2024020101
 #    SD2ErrorLogFile
 #        Log File for SD2-Errors
 #
+#    Spawns.ZoneArea
+#        Regenerates table creature_zone and gameobject_zone
+#        Default: 0 - turned off
+#
 ###################################################################################################################
 
 RealmID = 1
@@ -89,6 +95,7 @@ MaxPingTime = 30
 WorldServerPort = 8085
 BindIP = "0.0.0.0"
 SD2ErrorLogFile = "SD2Errors.log"
+Spawns.ZoneArea = 0
 
 ###################################################################################################################
 # PERFORMANCE SETTINGS
@@ -140,6 +147,11 @@ SD2ErrorLogFile = "SD2Errors.log"
 #        Load active creatures that have ExtraFlags CREATURE_EXTRA_FLAG_ACTIVE or movementType WAYPOINT_MOTION_TYPE
 #        This will allow creatures having these conditions to update their grid without any player around. Useful for running in debug mode.
 #        Default: True
+#
+#    Specials.Active
+#        Load specials - large, gigantic, infinite npcs, and update them and waypointing at all times even when no active object is near.
+#        Only loads the one grid they are in, unlike active, which loads visibility grid around them. Default should be true, but due to performance is opt-in.
+#        Default: False
 #
 #    GridCleanUpDelay
 #        Grid clean up delay (in milliseconds)
@@ -195,6 +207,11 @@ SD2ErrorLogFile = "SD2Errors.log"
 #        Disable mmap pathfinding on the listed maps.
 #        List of map ids with delimiter ','
 #
+#    mmap.preload
+#        Enable/Disable preloading on first mapId load - expensive but thread safe - use only for big servers
+#                 1 (enable)
+#        Default: 0 (disable)
+#
 #    PathFinder.OptimizePath
 #        Use or not path finder path optimization (cut calculated points).
 #                 0  (disable)
@@ -246,6 +263,7 @@ MaxOverspeedPings = 2
 GridUnload = 1
 LoadAllGridsOnMaps = ""
 Autoload.Active = 1
+Specials.Active = 0
 GridCleanUpDelay = 300000
 MapUpdateInterval = 100
 ChangeWeatherInterval = 600000
@@ -258,6 +276,7 @@ vmap.enableIndoorCheck = 1
 DetectPosCollision = 1
 mmap.enabled = 1
 mmap.ignoreMapIds = ""
+mmap.preload = 0
 PathFinder.OptimizePath = 1
 PathFinder.NormalizeZ = 0
 UpdateUptimeInterval = 10

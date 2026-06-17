@@ -19,8 +19,6 @@
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
 
-// TODO: Implement WOLTK only scaling auras
-
 enum
 {
     SPELL_PET_RESISTANCE = 37386,
@@ -175,8 +173,8 @@ struct WarlockPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 fire = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_FIRE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_FIRE);
-                        int32 shadow = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_SHADOW)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_SHADOW);
+                        int32 fire = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_FIRE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_FIRE));
+                        int32 shadow = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_SHADOW))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_SHADOW));
                         int32 maximum = (fire > shadow) ? fire : shadow;
                         if (maximum < 0)
                             maximum = 0;
@@ -189,8 +187,8 @@ struct WarlockPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 fire = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_FIRE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_FIRE);
-                        int32 shadow = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_SHADOW)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_SHADOW);
+                        int32 fire = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_FIRE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_FIRE));
+                        int32 shadow = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_SHADOW))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_SHADOW));
                         int32 maximum = (fire > shadow) ? fire : shadow;
                         if (maximum < 0)
                             maximum = 0;
@@ -324,7 +322,7 @@ struct MagePetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 frost = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_FROST)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_FROST);
+                        int32 frost = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_FROST))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_FROST));
                         if (frost < 0)
                             frost = 0;
                         value = frost * 0.4f;
@@ -413,7 +411,7 @@ struct PriestPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 shadow = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_SHADOW)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_SHADOW);
+                        int32 shadow = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_SHADOW))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_SHADOW));
                         if (shadow < 0)
                             shadow = 0;
                         value = shadow * 0.65f;
@@ -500,7 +498,7 @@ struct ElementalPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 nature = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_NATURE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_NATURE);
+                        int32 nature = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_NATURE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_NATURE));
                         if (nature < 0)
                             nature = 0;
                         value = nature * 0.57f;
@@ -512,7 +510,7 @@ struct ElementalPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 nature = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_NATURE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_NATURE);
+                        int32 nature = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_NATURE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_NATURE));
                         if (nature < 0)
                             nature = 0;
                         value = nature * 0.65f;
@@ -601,7 +599,7 @@ struct DruidPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 nature = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_NATURE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_NATURE);
+                        int32 nature = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_NATURE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_NATURE));
                         if (nature < 0)
                             nature = 0;
                         value = nature * 0.5f;
@@ -695,7 +693,7 @@ struct FeralSpiritPetScaling1 : public AuraScript
                         float mod = 0.5f;
                         if (Aura* aura = owner->GetAura(63271, EFFECT_INDEX_0))
                             mod += float(aura->GetAmount()) / 100;
-                        int32 nature = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_NATURE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_NATURE);
+                        int32 nature = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_NATURE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_NATURE));
                         if (nature < 0)
                             nature = 0;
                         value = nature * mod;
@@ -707,7 +705,7 @@ struct FeralSpiritPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 nature = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_NATURE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_NATURE);
+                        int32 nature = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_NATURE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_NATURE));
                         if (nature < 0)
                             nature = 0;
                         value = nature * 0.65f;
@@ -866,8 +864,8 @@ struct InfernalPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 fire = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_FIRE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_FIRE);
-                        int32 shadow = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_SHADOW)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_SHADOW);
+                        int32 fire = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_FIRE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_FIRE));
+                        int32 shadow = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_SHADOW))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_SHADOW));
                         int32 maximum = (fire > shadow) ? fire : shadow;
                         if (maximum < 0)
                             maximum = 0;
@@ -880,8 +878,8 @@ struct InfernalPetScaling1 : public AuraScript
                 {
                     if (owner->IsPlayer())
                     {
-                        int32 fire = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_FIRE)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_FIRE);
-                        int32 shadow = int32(owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + SPELL_SCHOOL_SHADOW)) - owner->GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + SPELL_SCHOOL_SHADOW);
+                        int32 fire = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_FIRE))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_FIRE));
+                        int32 shadow = int32(owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_POS) + static_cast<uint16>(SPELL_SCHOOL_SHADOW))) - owner->GetUInt32Value(static_cast<uint16>(PLAYER_FIELD_MOD_DAMAGE_DONE_NEG) + static_cast<uint16>(SPELL_SCHOOL_SHADOW));
                         int32 maximum = (fire > shadow) ? fire : shadow;
                         if (maximum < 0)
                             maximum = 0;

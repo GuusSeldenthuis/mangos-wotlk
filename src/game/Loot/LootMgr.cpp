@@ -205,14 +205,14 @@ bool LootStore::HaveQuestLootFor(uint32 loot_id) const
         return false;
 
     // scan loot for quest items
-    return itr->second.HasQuestDrop(m_LootTemplates);
+    return itr->second.HasQuestDrop();
 }
 
 bool LootStore::HaveQuestLootForPlayer(uint32 loot_id, Player* player) const
 {
     LootTemplateMap::const_iterator tab = m_LootTemplates.find(loot_id);
     if (tab != m_LootTemplates.end())
-        if (tab->second.HasQuestDropForPlayer(m_LootTemplates, player))
+        if (tab->second.HasQuestDropForPlayer(player))
             return true;
 
     return false;
@@ -1453,7 +1453,7 @@ void Loot::Release(Player* player)
                         AutoStore(player); // can be lost if no space
                     Clear();
                     m_itemTarget->SetLootState(ITEM_LOOT_REMOVED);
-                    player->DestroyItemCount(m_itemTarget, count, true);
+                    player->DestroyItemCount(*m_itemTarget, count, true);
                     break;
                 }
                 // temporary loot, auto loot move
@@ -1768,16 +1768,16 @@ Loot::Loot(Player* player, Creature* creature, LootType type) :
     m_clientLootType(CLIENT_LOOT_CORPSE), m_lootMethod(NOT_GROUP_TYPE_LOOT), m_threshold(ITEM_QUALITY_UNCOMMON), m_maxEnchantSkill(0), m_haveItemOverThreshold(false),
     m_isChecked(false), m_isChest(false), m_isChanged(false), m_isFakeLoot(false), m_createTime(World::GetCurrentClockTime())
 {
-    // the player whose group may loot the corpse
-    if (!player)
-    {
-        sLog.outError("LootMgr::CreateLoot> Error cannot get looter info to create loot!");
-        return;
-    }
-
     if (!creature)
     {
         sLog.outError("Loot::CreateLoot> cannot create loot, no creature passed!");
+        return;
+    }
+
+    // the player whose group may loot the corpse
+    if (!player && !creature->GetSettings().HasFlag(CreatureStaticFlags::CAN_WIELD_LOOT))
+    {
+        sLog.outError("LootMgr::CreateLoot> Error cannot get looter info to create loot!");
         return;
     }
 
@@ -1789,8 +1789,15 @@ Loot::Loot(Player* player, Creature* creature, LootType type) :
     {
         case LOOT_CORPSE:
         {
-            // setting loot right
-            SetGroupLootRight(player);
+            if (creature->GetSettings().HasFlag(CreatureStaticFlags3::CAN_BE_MULTITAPPED))
+            {
+                for (auto& threatEntry : creature->getThreatManager().getThreatList())
+                    if (threatEntry->getTarget()->IsPlayer())
+                        m_ownerSet.insert(threatEntry->getTarget()->GetObjectGuid());
+            }
+            else if (player)
+                // setting loot right
+                SetGroupLootRight(player);
             m_clientLootType = CLIENT_LOOT_CORPSE;
 
             if ((creatureInfo->LootId && FillLoot(creatureInfo->LootId, LootTemplates_Creature, player, false)) || creatureInfo->MaxLootGold > 0)
@@ -1884,7 +1891,7 @@ Loot::Loot(Player* player, GameObject* gameObject, LootType type, bool lootSnaps
     m_guidTarget = gameObject->GetObjectGuid();
 
     // not check distance for GO in case owned GO (fishing bobber case, for example)
-    // And permit out of range GO with no owner in case fishing hole
+    // And permit out of ranged GO with no owner in case fishing hole
     if (!lootSnapshot) // ignores distance
     {
         if ((type != LOOT_FISHINGHOLE &&
@@ -2212,6 +2219,48 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
     return msg;
 }
 
+std::tuple<uint32, uint32, uint32> Loot::GetQualifiedWeapons()
+{
+    uint32 mh = 0, oh = 0, ranged = 0;
+    uint32 mhType = 0;
+    for (auto const& itr : m_lootItems)
+    {
+        if (ItemPrototype const* pItem = sObjectMgr.GetItemPrototype(itr->itemId))
+        {
+            if (mh == 0)
+            {
+                if (pItem->InventoryType == INVTYPE_WEAPON ||
+                    pItem->InventoryType == INVTYPE_WEAPONMAINHAND ||
+                    pItem->InventoryType == INVTYPE_2HWEAPON && oh == 0)
+                {
+                    mh = itr->itemId;
+                    mhType = pItem->InventoryType;
+                    continue;
+                }
+            }
+
+            if (oh == 0 && mhType != INVTYPE_2HWEAPON)
+            {
+                if (pItem->InventoryType == INVTYPE_WEAPON ||
+                    pItem->InventoryType == INVTYPE_WEAPONOFFHAND ||
+                    pItem->InventoryType == INVTYPE_SHIELD ||
+                    pItem->InventoryType == INVTYPE_HOLDABLE)
+                {
+                    oh = itr->itemId;
+                    continue;
+                }
+            }
+
+            if (ranged == 0 && pItem->IsRangedWeapon())
+            {
+                ranged = itr->itemId;
+                continue;
+            }
+        }
+    }
+    return { mh, oh, ranged };
+}
+
 bool Loot::AutoStore(Player* player, bool broadcast /*= false*/, uint32 bag /*= NULL_BAG*/, uint32 slot /*= NULL_SLOT*/)
 {
     bool result = true;
@@ -2230,7 +2279,7 @@ bool Loot::AutoStore(Player* player, bool broadcast /*= false*/, uint32 bag /*= 
             msg = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem->itemId, lootItem->count);
         if (msg != EQUIP_ERR_OK)
         {
-            player->SendEquipError(msg, nullptr, nullptr, lootItem->itemId);
+            player->SendEquipError(msg, nullptr, nullptr, 0, lootItem->itemId);
             result = false;
             continue;
         }
@@ -2757,7 +2806,7 @@ void LootTemplate::Process(Loot& loot, Player const* lootOwner, bool rate, LootS
 }
 
 // True if template includes at least 1 quest drop entry
-bool LootTemplate::HasQuestDrop(LootTemplateMap const& store, uint8 groupId) const
+bool LootTemplate::HasQuestDrop(uint8 groupId) const
 {
     if (groupId)                                            // Group reference
     {
@@ -2770,10 +2819,10 @@ bool LootTemplate::HasQuestDrop(LootTemplateMap const& store, uint8 groupId) con
     {
         if (Entrie.mincountOrRef < 0)                           // References
         {
-            LootTemplateMap::const_iterator Referenced = store.find(-Entrie.mincountOrRef);
-            if (Referenced == store.end())
+            LootTemplate const* loot = LootTemplates_Reference.GetLootFor(-Entrie.mincountOrRef);
+            if (loot == nullptr)
                 continue;                                   // Error message [should be] already printed at loading stage
-            if (Referenced->second.HasQuestDrop(store, Entrie.group))
+            if (loot->HasQuestDrop(Entrie.group))
                 return true;
         }
         else if (Entrie.needs_quest)
@@ -2789,7 +2838,7 @@ bool LootTemplate::HasQuestDrop(LootTemplateMap const& store, uint8 groupId) con
 }
 
 // True if template includes at least 1 quest drop for an active quest of the player
-bool LootTemplate::HasQuestDropForPlayer(LootTemplateMap const& store, Player const* player, uint8 groupId) const
+bool LootTemplate::HasQuestDropForPlayer(Player const* player, uint8 groupId) const
 {
     if (groupId)                                            // Group reference
     {
@@ -2803,10 +2852,10 @@ bool LootTemplate::HasQuestDropForPlayer(LootTemplateMap const& store, Player co
     {
         if (Entrie.mincountOrRef < 0)                           // References processing
         {
-            LootTemplateMap::const_iterator Referenced = store.find(-Entrie.mincountOrRef);
-            if (Referenced == store.end())
+            LootTemplate const* loot = LootTemplates_Reference.GetLootFor(-Entrie.mincountOrRef);
+            if (loot == nullptr)
                 continue;                                   // Error message already printed at loading stage
-            if (Referenced->second.HasQuestDropForPlayer(store, player, Entrie.group))
+            if (loot->HasQuestDropForPlayer(player, Entrie.group))
                 return true;
         }
         else if (player->HasQuestForItem(Entrie.itemid))

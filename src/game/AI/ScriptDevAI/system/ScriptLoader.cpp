@@ -407,6 +407,7 @@ extern void AddSC_sholazar_basin();
 extern void AddSC_storm_peaks();
 extern void AddSC_wintergrasp();
 extern void AddSC_zuldrak();
+extern void AddSC_argent_tournament();
 
 // outland
 extern void AddSC_boss_exarch_maladaar();                   // auchindoun, auchenai_crypts
@@ -415,6 +416,7 @@ extern void AddSC_boss_nexusprince_shaffar();               // auchindoun, mana_
 extern void AddSC_boss_pandemonius();
 extern void AddSC_mana_tombs();
 extern void AddSC_boss_yor();
+extern void AddSC_instance_mana_tombs();
 extern void AddSC_boss_anzu();                              // auchindoun, sethekk_halls
 extern void AddSC_boss_darkweaver_syth();
 extern void AddSC_boss_talon_king_ikiss();
@@ -909,6 +911,7 @@ void AddScripts()
     AddSC_storm_peaks();
     AddSC_wintergrasp();
     AddSC_zuldrak();
+    AddSC_argent_tournament();
 
     // outland
     AddSC_boss_exarch_maladaar();                           // auchindoun, auchenai_crypts
@@ -917,6 +920,7 @@ void AddScripts()
     AddSC_boss_pandemonius();
     AddSC_mana_tombs();
     AddSC_boss_yor();
+    AddSC_instance_mana_tombs();
     AddSC_boss_anzu();                                      // auchindoun, sethekk_halls
     AddSC_boss_darkweaver_syth();
     AddSC_boss_talon_king_ikiss();

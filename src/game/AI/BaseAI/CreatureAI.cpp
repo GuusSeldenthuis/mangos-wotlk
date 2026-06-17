@@ -33,21 +33,24 @@ CreatureAI::CreatureAI(Creature* creature, uint32 combatActions) :
     m_creature(creature),
     m_deathPrevented(false), m_followAngle(0.f), m_followDist(0.f)
 {
-    m_dismountOnAggro = !(m_creature->GetCreatureInfo()->CreatureTypeFlags & CREATURE_TYPEFLAGS_MOUNTED_COMBAT);
-    SetMeleeEnabled(!m_creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE));
+    m_dismountOnAggro = !(m_creature->GetCreatureInfo()->HasFlag(CreatureTypeFlags::ALLOW_MOUNTED_COMBAT));
+    SetMeleeEnabled(!(m_creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE)
+        || m_creature->GetSettings().HasFlag(CreatureStaticFlags4::NO_MELEE_APPROACH) || m_creature->GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_NO_MELEE));
     if (m_creature->GetSettings().HasFlag(CreatureStaticFlags::SESSILE))
         SetAIImmobilizedState(true);
 
-    SetMeleeEnabled(!(m_creature->GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_NO_MELEE));
     if (m_creature->IsNoAggroOnSight())
         SetReactState(REACT_DEFENSIVE);
+    if (m_creature->GetSettings().HasFlag(CreatureStaticFlags2::SPAWN_DEFENSIVE))
+        SetReactState(REACT_DEFENSIVE);
+    else if (m_creature->GetSettings().HasFlag(CreatureStaticFlags::IGNORE_COMBAT))
+        m_creature->SetCanEnterCombat(false);
     if (m_creature->IsGuard() || m_unit->GetCharmInfo()) // guards and charmed targets
         m_visibilityDistance = sWorld.getConfig(CONFIG_FLOAT_SIGHT_GUARDER);
 }
 
 void CreatureAI::Reset()
 {
-
     m_currentRangedMode = m_rangedMode;
     m_attackDistance = m_chaseDistance;
 }
@@ -55,12 +58,6 @@ void CreatureAI::Reset()
 void CreatureAI::EnterCombat(Unit* enemy)
 {
     UnitAI::EnterCombat(enemy);
-    // TODO: Monitor this condition to see if it conflicts with any pets
-    if (m_creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE) && !m_creature->IsRooted() && !m_creature->IsInPanic() && enemy && enemy->IsPlayerControlled())
-    {
-        DoFlee(30000);
-        SetAIOrder(ORDER_CRITTER_FLEE); // mark as critter flee for custom handling
-    }
     if (enemy && (m_creature->IsGuard() || m_creature->IsCivilian()))
     {
         // Send Zone Under Attack message to the LocalDefense and WorldDefense Channels
@@ -69,8 +66,27 @@ void CreatureAI::EnterCombat(Unit* enemy)
     }
 }
 
+void CreatureAI::EnterEvadeMode()
+{
+    UnitAI::EnterEvadeMode();
+    ResetTimersOnEvade();
+    Reset();
+}
+
 void CreatureAI::AttackStart(Unit* who)
 {
+    if (m_creature->GetSettings().HasFlag(CreatureStaticFlags::COMBAT_PING))
+    {
+        if (Player* owner = dynamic_cast<Player*>(m_creature->GetSpawner()))
+        {
+            WorldPacket data(MSG_MINIMAP_PING, (8 + 4 + 4));
+            data << m_creature->GetObjectGuid();
+            data << m_creature->GetPositionX();
+            data << m_creature->GetPositionY();
+            owner->SendDirectMessage(data);
+        }
+    }
+
     if (!who || HasReactState(REACT_PASSIVE))
         return;
 
@@ -113,6 +129,9 @@ void CreatureAI::AttackPassengersIfCan(Unit* who)
             if (seatEntry->m_flags & SEAT_FLAG_NOT_SELECTABLE || seatEntry->m_flags & SEAT_FLAG_HIDE_PASSENGER)
                 continue;
 
+            if (!m_creature->CanAttack(passenger))
+                continue;
+
             m_creature->AddThreat(passenger);
             m_creature->SetInCombatWith(passenger);
             passenger->SetInCombatWith(m_creature);
@@ -133,6 +152,19 @@ void CreatureAI::DamageTaken(Unit* dealer, uint32& damage, DamageEffectType dama
             }
         }
     }
+}
+
+void CreatureAI::JustReachedHome()
+{
+    if (m_dismountOnAggro)
+        if (CreatureInfo const* mountInfo = m_creature->GetMountInfo())
+            m_creature->Mount(Creature::ChooseDisplayId(mountInfo));
+}
+
+void CreatureAI::JustRespawned()
+{
+    ResetAllTimers();
+    Reset();
 }
 
 void CreatureAI::SetDeathPrevention(bool state)
@@ -218,12 +250,14 @@ void CreatureAI::OnCallForHelp(Unit* enemy)
 {
     if (FactionTemplateEntry const* factionTemplate = m_creature->GetFactionTemplateEntry())
     {
-        if (factionTemplate->factionFlags & FACTION_TEMPLATE_FLEE_FROM_CALL_FOR_HELP)
+        if (factionTemplate->IsFleeFromCallForHelp())
         {
             if (m_creature->SetInPanic(10000))
                 SetAIOrder(ORDER_FLEE_FROM_CALL_FOR_HELP);
             return;
         }
+        if (!factionTemplate->IsRespondToCallForHelp())
+            return;
     }
     AttackStart(enemy);
 }
@@ -235,7 +269,7 @@ void CreatureAI::HandleAssistanceCall(Unit* sender, Unit* invoker)
     if (m_creature->CanAssist(sender) && m_creature->CanAttackOnSight(invoker) && invoker->IsVisibleForOrDetect(m_creature, m_creature, false))
     {
         m_creature->SetNoCallAssistance(true);
-        AttackStart(invoker);
+        OnCallForHelp(invoker);
     }
 }
 
@@ -255,7 +289,7 @@ void CreatureAI::TimedFleeingEnded()
     if (GetAIOrder() == ORDER_FLEE_FROM_CALL_FOR_HELP && m_creature->IsAlive())
     {
         if (FactionTemplateEntry const* factionTemplate = m_creature->GetFactionTemplateEntry())
-            if (factionTemplate->factionFlags & FACTION_TEMPLATE_FLEE_FROM_CALL_FOR_HELP)
+            if (factionTemplate->IsFleeFromCallForHelp())
                 EnterEvadeMode();
     }
     if (GetAIOrder() == ORDER_CRITTER_FLEE && m_creature->IsAlive())
@@ -275,7 +309,7 @@ void CreatureAI::RequestFollow(Unit* followee)
         m_followDist = data.second;
         m_requestedFollower = followee->GetObjectGuid();
     }
-    m_creature->GetMotionMaster()->MoveFollow(followee, m_followDist, m_followAngle);
+    m_creature->GetMotionMaster()->MoveFollow(followee, m_followDist, m_followAngle, m_creature->GetDefaultMovementType() == FOLLOW_MOTION_TYPE, false);
 }
 
 void CreatureAI::RelinquishFollow(ObjectGuid follower)

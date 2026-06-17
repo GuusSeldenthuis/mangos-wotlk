@@ -86,25 +86,22 @@ enum
 ## spell_aura_dummy_frostmourne_equip
 ######*/
 
-bool EffectAuraDummy_spell_aura_dummy_frostmourne_equip(const Aura* pAura, bool bApply)
+// 72729 - Frostmourne Equip
+struct FrostmourneEquip : public AuraScript
 {
-    // ### Workaround alert! ###
-    // This is required in order to forced despawn the Frostmourne Gameobject
-    // To be removed and replaced with DBscripts once proper despawning of Door type GOs is supported
-    if (pAura->GetId() == SPELL_FROSTMOURNE_EQUIP && pAura->GetEffIndex() == EFFECT_INDEX_0 && bApply)
+    void OnApply(Aura* aura, bool apply) const override
     {
-        if (Creature* pTarget = (Creature*)pAura->GetTarget())
-        {
-            ScriptedInstance* pInstance = (ScriptedInstance*)pTarget->GetInstanceData();
-            if (!pInstance)
-                return true;
+        if (!apply)
+            return;
 
-            if (GameObject* pGo = pInstance->GetSingleGameObjectFromStorage(GO_FROSTMOURNE))
-                pGo->Delete();
-        }
+        ScriptedInstance* instance = dynamic_cast<ScriptedInstance*>(aura->GetTarget()->GetInstanceData());
+        if (!instance)
+            return;
+
+        if (GameObject* go = instance->GetSingleGameObjectFromStorage(GO_FROSTMOURNE))
+            go->ForcedDespawn();
     }
-    return true;
-}
+};
 
 /*######
 ## at_frostworn_general
@@ -189,13 +186,16 @@ enum
     SPELL_JUMPT_TO_TARGET       = 69886,
 };
 
-bool EffectDummyCreature_spell_summon_reflections(Unit* /*pCaster*/, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 69223 - Summon Reflections
+struct SummonReflections : public SpellScript
 {
-    if (uiSpellId == SPELL_SUMMON_REFLECTIONS && uiEffIndex == EFFECT_INDEX_0)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        instance_halls_of_reflection* pInstance = (instance_halls_of_reflection*)pCreatureTarget->GetInstanceData();
+        Unit* caster = spell->GetCaster();
+        Unit* target = spell->GetUnitTarget();
+        instance_halls_of_reflection* pInstance = static_cast<instance_halls_of_reflection*>(target->GetInstanceData());
         if (!pInstance)
-            return true;
+            return;
 
         GuidList lReflectionsGuids;
         pInstance->GetReflectionsGUIDList(lReflectionsGuids);
@@ -203,29 +203,27 @@ bool EffectDummyCreature_spell_summon_reflections(Unit* /*pCaster*/, uint32 uiSp
         if (lReflectionsGuids.empty())
         {
             script_error_log("instance_halls_of_reflection: Error: couldn't find any spiritual reflection.");
-            return true;
+            return;
         }
 
         // Set all reflections to attack owner
-        for (GuidList::const_iterator itr = lReflectionsGuids.begin(); itr != lReflectionsGuids.end(); ++itr)
+        for (ObjectGuid reflection : lReflectionsGuids)
         {
-            if (Creature* pCreature = pCreatureTarget->GetMap()->GetCreature(*itr))
+            if (Creature* creature = target->GetMap()->GetCreature(reflection))
             {
-                if (pCreature->IsTemporarySummon())
+                if (creature->IsTemporarySummon())
                 {
-                    if (Player* pSummoner = pCreature->GetMap()->GetPlayer(pCreature->GetSpawnerGuid()))
+                    if (Player* summoner = creature->GetMap()->GetPlayer(creature->GetSpawnerGuid()))
                     {
-                        pCreature->SetLevitate(false);
-                        pCreature->AI()->AttackStart(pSummoner);
-                        pCreature->RemoveAurasDueToSpell(SPELL_FROZEN_POSITION);
-                        pCreature->CastSpell(pSummoner, SPELL_JUMPT_TO_TARGET, TRIGGERED_OLD_TRIGGERED);
+                        creature->SetLevitate(false);
+                        creature->AI()->AttackStart(summoner);
+                        creature->RemoveAurasDueToSpell(SPELL_FROZEN_POSITION);
+                        creature->CastSpell(summoner, SPELL_JUMPT_TO_TARGET, TRIGGERED_OLD_TRIGGERED);
                     }
                 }
             }
         }
     }
-
-    return true;
 };
 
 /*######
@@ -266,11 +264,8 @@ bool AreaTrigger_at_queldelar_start(Player* pPlayer, AreaTriggerEntry const* pAt
     return true;
 };
 
-/*######
-## spell_gunship_cannon_fire_aura - 70017
-######*/
-
-struct spell_gunship_cannon_fire_aura : public AuraScript
+// 70017 - Gunship Cannon Fire
+struct GunshipCannonFireAura : public AuraScript
 {
     void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& /*data*/) const override
     {
@@ -292,11 +287,8 @@ struct spell_gunship_cannon_fire_aura : public AuraScript
     }
 };
 
-/*######
-## spell_halls_of_reflection_clone - 69828
-######*/
-
-struct spell_halls_of_reflection_clone : public SpellScript
+// 69828 - Halls of Reflection Clone
+struct HallsOfReflectionClone : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
@@ -316,11 +308,8 @@ struct spell_halls_of_reflection_clone : public SpellScript
     }
 };
 
-/*######
-## spell_start_halls_of_reflection_quest - 72900
-######*/
-
-struct spell_start_halls_of_reflection_quest : public SpellScript
+// 72900 - Start Halls of Reflection Quest AE
+struct StartHallsOfReflectionQuest : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
@@ -344,18 +333,8 @@ void AddSC_halls_of_reflection()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
-    pNewScript->Name = "npc_spell_aura_dummy_frostmourne_equip";
-    pNewScript->pEffectAuraDummy = &EffectAuraDummy_spell_aura_dummy_frostmourne_equip;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
     pNewScript->Name = "at_frostworn_general";
     pNewScript->pAreaTrigger = &AreaTrigger_at_frostworn_general;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
-    pNewScript->Name = "npc_spell_summon_reflections";
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_summon_reflections;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -363,7 +342,9 @@ void AddSC_halls_of_reflection()
     pNewScript->pAreaTrigger = &AreaTrigger_at_queldelar_start;
     pNewScript->RegisterSelf();
 
-    RegisterSpellScript<spell_gunship_cannon_fire_aura>("spell_gunship_cannon_fire_aura");
-    RegisterSpellScript<spell_halls_of_reflection_clone>("spell_halls_of_reflection_clone");
-    RegisterSpellScript<spell_start_halls_of_reflection_quest>("spell_start_halls_of_reflection_quest");
+    RegisterSpellScript<FrostmourneEquip>("spell_frostmourne_equip");
+    RegisterSpellScript<SummonReflections>("spell_summon_reflections");
+    RegisterSpellScript<GunshipCannonFireAura>("spell_gunship_cannon_fire_aura");
+    RegisterSpellScript<HallsOfReflectionClone>("spell_halls_of_reflection_clone");
+    RegisterSpellScript<StartHallsOfReflectionQuest>("spell_start_halls_of_reflection_quest");
 }

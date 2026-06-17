@@ -44,8 +44,8 @@ struct GameObjectInfo
     uint32  displayId;
     char*   name;
     char*   IconName;
-    char*   castBarCaption;
-    char*   unk1;
+    char*   OpeningText;
+    char*   ClosingText;
     uint32  faction;
     uint32  flags;
     uint32  ExtraFlags;
@@ -587,6 +587,30 @@ struct GameObjectInfo
         }
     }
 
+    bool IsUsableInCombat() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_CHEST: return chest.notInCombat == 0;
+            default: return true;
+        }
+    }
+
+    bool IsInfiniteGameObject() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_DESTRUCTIBLE_BUILDING: return true;
+            case GAMEOBJECT_TYPE_TRAPDOOR:              return true;
+            default: return false;
+        }
+    }
+
+    bool IsLargeOrBiggerGameObject() const
+    {
+        return IsLargeGameObject() || IsInfiniteGameObject();
+    }
+
     bool IsServerOnly() const
     {
         switch (type)
@@ -595,6 +619,36 @@ struct GameObjectInfo
             case GAMEOBJECT_TYPE_TRAP: return trap.serverOnly;
             case GAMEOBJECT_TYPE_SPELL_FOCUS: return spellFocus.serverOnly;
             case GAMEOBJECT_TYPE_AURA_GENERATOR: return auraGenerator.serverOnly;
+            default: return false;
+        }
+    }
+
+    HighGuid GetHighGuid() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_TRANSPORT:
+            case GAMEOBJECT_TYPE_MO_TRANSPORT:
+            case GAMEOBJECT_TYPE_TRAPDOOR:
+                return HIGHGUID_MO_TRANSPORT;
+            default: return HIGHGUID_GAMEOBJECT;
+        }
+    }
+
+    bool IsSlowUpdateObject() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_BINDER:
+            case GAMEOBJECT_TYPE_GENERIC:
+            case GAMEOBJECT_TYPE_MAP_OBJECT:
+            case GAMEOBJECT_TYPE_DUEL_ARBITER:
+            case GAMEOBJECT_TYPE_MAILBOX:
+            case GAMEOBJECT_TYPE_MEETINGSTONE:
+            case GAMEOBJECT_TYPE_DUNGEON_DIFFICULTY:
+            case GAMEOBJECT_TYPE_GUILD_BANK:
+            case GAMEOBJECT_TYPE_BARBER_CHAIR:
+                return true;
             default: return false;
         }
     }
@@ -610,7 +664,8 @@ struct GameObjectInfo
 struct GameObjectLocale
 {
     std::vector<std::string> Name;
-    std::vector<std::string> CastBarCaption;
+    std::vector<std::string> OpeningText;
+    std::vector<std::string> ClosingText;
 };
 
 struct QuaternionData
@@ -817,7 +872,7 @@ class GameObject : public WorldObject
                    (m_respawnTime == 0 && m_spawnedByDefault);
         }
         bool IsSpawnedByDefault() const { return m_spawnedByDefault; }
-        uint32 GetRespawnDelay() const { return m_respawnDelay; }
+        uint32 GetRespawnDelay() const override { return m_respawnDelay; }
         void SetRespawnDelay(uint32 delay, bool once = false) { m_respawnDelay = delay; m_respawnOverriden = true; m_respawnOverrideOnce = once; }
         void SetForcedDespawn() { m_forcedDespawn = true; };
         void SetChestDespawn();
@@ -838,6 +893,8 @@ class GameObject : public WorldObject
         uint32 GetFaction() const override { return GetUInt32Value(GAMEOBJECT_FACTION); }
         void SetFaction(uint32 faction) { SetUInt32Value(GAMEOBJECT_FACTION, faction); }
         uint32 GetLevel() const override { return GetUInt32Value(GAMEOBJECT_LEVEL); }
+
+        bool CanUseNow(Player const* player) const;
 
         void Use(Unit* user, SpellEntry const* spellInfo = nullptr);
 
@@ -941,7 +998,7 @@ class GameObject : public WorldObject
         float GetStationaryZ() const { if (GetGOInfo()->type != GAMEOBJECT_TYPE_MO_TRANSPORT) return m_stationaryPosition.GetPositionZ(); return 0.f; }
         float GetStationaryO() const { if (GetGOInfo()->type != GAMEOBJECT_TYPE_MO_TRANSPORT) return m_stationaryPosition.GetPositionO(); return GetOrientation(); }
 
-        std::pair<float, float> GetClosestChairSlotPosition(Unit* user) const;
+        std::pair<float, float> GetClosestChairSlotPosition(Unit const* user) const;
 
         SpellCastResult CastSpell(Unit* temporaryCaster, Unit* Victim, uint32 spellId, uint32 triggeredFlags, Item* castItem = nullptr, Aura* triggeredByAura = nullptr, ObjectGuid originalCaster = ObjectGuid(), SpellEntry const* triggeredBy = nullptr);
 
@@ -961,6 +1018,9 @@ class GameObject : public WorldObject
         void SetGameObjectGroup(GameObjectGroup* group);
         void ClearGameObjectGroup();
         GameObjectGroup* GetGameObjectGroup() const { return m_goGroup; }
+
+        void UpdateNextUpdateTime() override;
+        uint32 ShouldPerformObjectUpdate(uint32 const diff) override;
 
     protected:
         uint32      m_spellId;

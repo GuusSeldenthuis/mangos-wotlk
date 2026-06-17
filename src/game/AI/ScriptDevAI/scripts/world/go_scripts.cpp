@@ -24,7 +24,6 @@ EndScriptData */
 /* ContentData
 go_ethereum_prison
 go_ethereum_stasis
-go_mysterious_snow_mound
 go_tele_to_dalaran_crystal
 go_tele_to_violet_stand
 go_andorhal_tower
@@ -279,36 +278,6 @@ bool GOUse_go_jump_a_tron(Player* pPlayer, GameObject* pGo)
 }
 
 /*######
-## go_mysterious_snow_mound
-######*/
-
-enum
-{
-    SPELL_SUMMON_DEEP_JORMUNGAR     = 66510,
-    SPELL_SUMMON_MOLE_MACHINE       = 66492,
-    SPELL_SUMMON_MARAUDER           = 66491,
-};
-
-bool GOUse_go_mysterious_snow_mound(Player* pPlayer, GameObject* pGo)
-{
-    if (urand(0, 1))
-    {
-        pPlayer->CastSpell(pPlayer, SPELL_SUMMON_DEEP_JORMUNGAR, TRIGGERED_OLD_TRIGGERED);
-    }
-    else
-    {
-        // This is basically wrong, but added for support.
-        // Mole machine would summon, along with unkonwn GO (a GO trap?) and then
-        // the npc would summon with base of that location.
-        pPlayer->CastSpell(pPlayer, SPELL_SUMMON_MOLE_MACHINE, TRIGGERED_OLD_TRIGGERED);
-        pPlayer->CastSpell(pPlayer, SPELL_SUMMON_MARAUDER, TRIGGERED_OLD_TRIGGERED);
-    }
-
-    pGo->SetLootState(GO_JUST_DEACTIVATED);
-    return true;
-}
-
-/*######
 ## go_tele_to_dalaran_crystal
 ######*/
 
@@ -442,24 +411,24 @@ enum BellHourlyObjects
 
 struct go_ai_bell : public GameObjectAI
 {
-    go_ai_bell(GameObject* go) : GameObjectAI(go), m_uiBellTolls(0), m_uiBellSound(GetBellSound(go)), m_uiBellTimer(0), m_playTo(GetBellZoneOrArea(go))
+    go_ai_bell(GameObject* go) : GameObjectAI(go), m_bellTolls(0), m_bellSound(GetBellSound(go)), m_bellTimer(0), m_playTo(GetBellZoneOrArea(go))
     {
         m_go->SetNotifyOnEventState(true);
         m_go->SetActiveObjectState(true);
     }
 
-    uint32 m_uiBellTolls;
-    uint32 m_uiBellSound;
-    uint32 m_uiBellTimer;
+    uint32 m_bellTolls;
+    uint32 m_bellSound;
+    uint32 m_bellTimer;
     PlayPacketSettings m_playTo;
 
-    uint32 GetBellSound(GameObject* pGo) const
+    uint32 GetBellSound(GameObject* go) const
     {
         uint32 soundId = 0;
-        switch (pGo->GetEntry())
+        switch (go->GetEntry())
         {
             case GO_HORDE_BELL:
-                switch (pGo->GetAreaId())
+                switch (go->GetAreaId())
                 {
                     case UNDERCITY_AREA:
                     case BRILL_AREA:
@@ -473,7 +442,7 @@ struct go_ai_bell : public GameObjectAI
                 break;
             case GO_ALLIANCE_BELL:
             {
-                switch (pGo->GetAreaId())
+                switch (go->GetAreaId())
                 {
                     case IRONFORGE_1_AREA:
                     case IRONFORGE_2_AREA:
@@ -497,32 +466,32 @@ struct go_ai_bell : public GameObjectAI
         return soundId;
     }
 
-    PlayPacketSettings GetBellZoneOrArea(GameObject* pGo) const
+    PlayPacketSettings GetBellZoneOrArea(GameObject* go) const
     {
-        PlayPacketSettings playTo = PLAY_AREA;
-        switch (pGo->GetEntry())
+        PlayPacketSettings playTo = PlayPacketSettings::AREA;
+        switch (go->GetEntry())
         {
             case GO_HORDE_BELL:
-                switch (pGo->GetAreaId())
+                switch (go->GetAreaId())
                 {
                     case UNDERCITY_AREA:
-                        playTo = PLAY_ZONE;
+                        playTo = PlayPacketSettings::ZONE;
                         break;
                 }
                 break;
             case GO_ALLIANCE_BELL:
             {
-                switch (pGo->GetAreaId())
+                switch (go->GetAreaId())
                 {
                     case DARNASSUS_AREA:
                     case IRONFORGE_2_AREA:
-                        playTo = PLAY_ZONE;
+                        playTo = PlayPacketSettings::ZONE;
                         break;
                 }
                 break;
             }
             case GO_KARAZHAN_BELL:
-                playTo = PLAY_ZONE;
+                playTo = PlayPacketSettings::ZONE;
                 break;
         }
         return playTo;
@@ -534,39 +503,34 @@ struct go_ai_bell : public GameObjectAI
         {
             time_t curTime = time(nullptr);
             tm localTm = *localtime(&curTime);
-            m_uiBellTolls = (localTm.tm_hour + 11) % 12;
+            m_bellTolls = (localTm.tm_hour + 11) % 12;
 
-            if (m_uiBellTolls)
-                m_uiBellTimer = 3000;
+            if (m_bellTolls)
+                m_bellTimer = 3000;
 
-            m_go->GetMap()->PlayDirectSoundToMap(m_uiBellSound, m_go->GetAreaId());
+            m_go->PlayDistanceSound(m_bellSound, PlayPacketParameters(m_playTo, m_playTo == PlayPacketSettings::ZONE ? m_go->GetZoneId() : m_go->GetAreaId()));
         }
     }
 
-    void UpdateAI(const uint32 uiDiff) override
+    void UpdateAI(const uint32 diff) override
     {
-        if (m_uiBellTimer)
+        if (m_bellTimer)
         {
-            if (m_uiBellTimer <= uiDiff)
+            if (m_bellTimer <= diff)
             {
-                m_go->PlayDirectSound(m_uiBellSound, PlayPacketParameters(PLAY_AREA, m_go->GetAreaId()));
+                m_go->PlayDistanceSound(m_bellSound, PlayPacketParameters(m_playTo, m_playTo == PlayPacketSettings::ZONE ? m_go->GetZoneId() : m_go->GetAreaId()));
 
-                m_uiBellTolls--;
-                if (m_uiBellTolls)
-                    m_uiBellTimer = 3000;
+                m_bellTolls--;
+                if (m_bellTolls)
+                    m_bellTimer = 3000;
                 else
-                    m_uiBellTimer = 0;
+                    m_bellTimer = 0;
             }
             else
-                m_uiBellTimer -= uiDiff;
+                m_bellTimer -= diff;
         }
     }
 };
-
-GameObjectAI* GetAI_go_bells(GameObject* go)
-{
-    return new go_ai_bell(go);
-}
 
 /*####
 ## go_darkmoon_faire_music
@@ -799,9 +763,9 @@ struct go_midsummer_music : public GameObjectAI
             [&](Player * player)
             {
                 if (player->GetTeam() == ALLIANCE)
-                    m_go->PlayMusic(EVENTMIDSUMMERFIREFESTIVAL_A, PlayPacketParameters(PLAY_TARGET, player));
+                    m_go->PlayMusic(EVENTMIDSUMMERFIREFESTIVAL_A, PlayPacketParameters(PlayPacketSettings::TARGET, player));
                 else
-                    m_go->PlayMusic(EVENTMIDSUMMERFIREFESTIVAL_H, PlayPacketParameters(PLAY_TARGET, player));
+                    m_go->PlayMusic(EVENTMIDSUMMERFIREFESTIVAL_H, PlayPacketParameters(PlayPacketSettings::TARGET, player));
             });
             m_musicTimer = 5000;
         }
@@ -1133,6 +1097,30 @@ struct go_aura_generator : public GameObjectAI
             ChangeState(bool(miscValue));
     }
 
+    bool CustomCondition(Player const* player)
+    {
+        switch (m_spellInfo->Id)
+        {
+            case 59652: // Cloak Dome (Aura Generator)
+            case 61342: // Cloak Dome (Aura Generator 2)
+            {
+                {
+                    QuestStatus questStatus = player->GetQuestStatus(13379);
+                    if (questStatus == QUEST_STATUS_INCOMPLETE || questStatus == QUEST_STATUS_COMPLETE)
+                        return true;
+                }
+                {
+                    QuestStatus questStatus = player->GetQuestStatus(13383);
+                    if (questStatus == QUEST_STATUS_INCOMPLETE || questStatus == QUEST_STATUS_COMPLETE)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     void ChangeState(bool apply)
     {
         m_started = apply;
@@ -1165,6 +1153,8 @@ struct go_aura_generator : public GameObjectAI
         for (auto& ref : m_go->GetMap()->GetPlayers())
         {
             Player* player = ref.getSource();
+            if (!CustomCondition(player))
+                continue;
             float x, y, z;
             m_go->GetPosition(x, y, z);
             auto bounds = player->GetSpellAuraHolderBounds(m_spellInfo->Id);
@@ -1184,8 +1174,14 @@ struct go_aura_generator : public GameObjectAI
                 if (isCloseEnough)
                 {
                     myHolder = CreateSpellAuraHolder(m_spellInfo, player, m_go);
-                    GameObjectAura* Aur = new GameObjectAura(m_spellInfo, EFFECT_INDEX_0, nullptr, nullptr, myHolder, player, m_go);
-                    myHolder->AddAura(Aur, EFFECT_INDEX_0);
+                    for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+                    {
+                        if (m_spellInfo->EffectApplyAuraName[i] > 0)
+                        {
+                            GameObjectAura* Aur = new GameObjectAura(m_spellInfo, SpellEffectIndex(i), nullptr, nullptr, myHolder, player, m_go);
+                            myHolder->AddAura(Aur, SpellEffectIndex(i));
+                        }
+                    }
                     if (!player->AddSpellAuraHolder(myHolder))
                         delete myHolder;
                 }
@@ -1255,11 +1251,6 @@ void AddSC_go_scripts()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
-    pNewScript->Name = "go_mysterious_snow_mound";
-    pNewScript->pGOUse =          &GOUse_go_mysterious_snow_mound;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
     pNewScript->Name = "go_tele_to_dalaran_crystal";
     pNewScript->pGOUse =          &GOUse_go_tele_to_dalaran_crystal;
     pNewScript->RegisterSelf();
@@ -1276,7 +1267,7 @@ void AddSC_go_scripts()
 
     pNewScript = new Script;
     pNewScript->Name = "go_bells";
-    pNewScript->GetGameObjectAI = &GetAI_go_bells;
+    pNewScript->GetGameObjectAI = &GetNewAIInstance<go_ai_bell>;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;

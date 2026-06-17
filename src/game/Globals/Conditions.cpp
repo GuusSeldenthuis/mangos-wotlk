@@ -98,7 +98,8 @@ uint8 const ConditionTargetsInternal[] =
     CONDITION_REQ_MAP_OR_WORLDOBJECT, //  39
     CONDITION_REQ_NONE,               //  40
     CONDITION_REQ_NONE,               //  41
-    CONDITION_REQ_NONE                //  42
+    CONDITION_REQ_NONE,               //  42
+    CONDITION_REQ_TARGET_UNIT,        //  43
 };
 
 // Starts from 4th element so that -3 will return first element.
@@ -526,6 +527,16 @@ bool inline ConditionEntry::Evaluate(WorldObject const* target, Map const* map, 
         {
             int32 value = map->GetVariableManager().GetVariable(m_value1);
             return CheckOp(ConditionOperation(m_value2), value, m_value3);
+        }
+        case CONDITION_IS_IN_COMBAT:
+        {
+            if (!target->IsUnit())
+            {
+                sLog.outErrorDb("CONDITION_PVP_SCRIPT (entry %u) is used on non unit target. Target is %s", m_entry, target->GetGuidStr().c_str());
+                return false;
+            }
+
+            return static_cast<Unit const*>(target)->IsInCombat() != bool(m_value1);
         }
         default:
             break;
@@ -1029,11 +1040,63 @@ bool ConditionEntry::IsValid() const
                 return false;
             }
             break;
+        case CONDITION_IS_IN_COMBAT:
+            if (m_value1 > 1)
+            {
+                sLog.outErrorDb("Worldstate condition (entry %u, type %u) has invalid is in combat state %u. Skipping.", m_entry, m_condition, m_value1);
+                return false;
+            }
+            break;
         default:
             sLog.outErrorDb("Condition entry %u has bad type of %d, skipped ", m_entry, m_condition);
             return false;
     }
     return true;
+}
+
+uint32 ConditionEntry::UsesSpell() const
+{
+    switch (m_condition)
+    {
+        case CONDITION_NOT:
+        {
+            ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(m_value1);
+            MANGOS_ASSERT(condition);
+            return condition->UsesSpell();
+        }
+        case CONDITION_AND:
+        case CONDITION_OR:
+        {
+            {
+                ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(m_value1);
+                if (condition)
+                    if (uint32 spellId = condition->UsesSpell())
+                        return spellId;
+            }
+            {
+                ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(m_value2);
+                if (condition)
+                    if (uint32 spellId = condition->UsesSpell())
+                        return spellId;
+            }
+            {
+                ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(m_value3);
+                if (condition)
+                    if (uint32 spellId = condition->UsesSpell())
+                        return spellId;
+            }
+            {
+                ConditionEntry const* condition = sConditionStorage.LookupEntry<ConditionEntry>(m_value4);
+                if (condition)
+                    if (uint32 spellId = condition->UsesSpell())
+                        return spellId;
+            }
+            return false;
+        }
+        case CONDITION_AURA:
+            return m_value1;
+    }
+    return 0;
 }
 
 // Check if a condition can be used without providing a player param

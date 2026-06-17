@@ -28,6 +28,7 @@
 #include "Server/DBCEnums.h"
 #include "Globals/SharedDefines.h"
 #include "LFG/LFG.h"
+#include "Util/UniqueTrackablePtr.h"
 
 struct ItemPrototype;
 
@@ -251,6 +252,9 @@ class Group
         }
 
         void SetTargetIcon(uint8 id, ObjectGuid whoGuid, ObjectGuid targetGuid);
+#ifdef ENABLE_PLAYERBOTS
+        ObjectGuid GetTargetIcon(uint8 id) { return m_targetIcons[id]; }
+#endif
 
         Difficulty GetDifficulty(bool isRaid) const { return isRaid ? m_raidDifficulty : m_dungeonDifficulty; }
         Difficulty GetDungeonDifficulty() const { return m_dungeonDifficulty; }
@@ -297,6 +301,8 @@ class Group
         BoundInstancesMap& GetBoundInstances(Difficulty difficulty) { return m_boundInstances[difficulty]; }
 
         LFGData& GetLfgData() { return m_lfgData; }
+
+        MaNGOS::unique_weak_ptr<Group> GetWeakPtr() const { return m_scriptRef; }
 
     protected:
         bool _addMember(ObjectGuid guid, const char* name, bool isAssistant = false);
@@ -392,5 +398,9 @@ class Group
         uint8*              m_subGroupsCounts;
 
         LFGData             m_lfgData;
+        uint32              m_counter;
+
+        struct NoopGroupDeleter { void operator()(Group*) const { /*noop - not managed*/ } };
+        MaNGOS::unique_trackable_ptr<Group> m_scriptRef;
 };
 #endif

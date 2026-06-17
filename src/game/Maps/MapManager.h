@@ -26,6 +26,7 @@
 #include "Maps/Map.h"
 #include "Grids/GridStates.h"
 #include "Maps/MapUpdater.h"
+#include "Util/UniqueTrackablePtr.h"
 
 #include <functional>
 
@@ -61,11 +62,11 @@ class MapManager : public MaNGOS::Singleton<MapManager, MaNGOS::ClassLevelLockab
         typedef MaNGOS::ClassLevelLockable<MapManager, std::recursive_mutex>::Lock Guard;
 
     public:
-        typedef std::map<MapID, Map* > MapMapType;
+        typedef std::map<MapID, MaNGOS::unique_trackable_ptr<Map> > MapMapType;
 
         void CreateContinents();
         Map* CreateMap(uint32, const WorldObject* obj);
-        Map* CreateBgMap(uint32 mapid, BattleGround* bg);
+        Map* CreateBgMap(uint32 mapid, uint32 instanceId, BattleGround* bg);
         Map* FindMap(uint32 mapid, uint32 instanceId = 0) const;
 
         void UpdateGridState(grid_state_t state, Map& map, NGridType& ngrid, GridInfo& ginfo, const uint32& x, const uint32& y, const uint32& t_diff);
@@ -149,17 +150,11 @@ class MapManager : public MaNGOS::Singleton<MapManager, MaNGOS::ClassLevelLockab
         // get list of all maps
         const MapMapType& Maps() const { return i_maps; }
 
-        template<typename Do> void DoForAllMaps(Do& _do)
-        {
-            for (auto& mapData : i_maps)
-            {
-                _do(mapData.second);
-            }
-        }
-        template<typename Do> void DoForAllMapsWithMapId(uint32 mapId, Do& _do);
         template<typename Check> inline WorldObject* SearchOnAllLoadedMap(Check& check);
         void DoForAllMaps(const std::function<void(Map*)>& worker);
-        void DoForAllMapsWithMapId(uint32 mapId, std::function<void(Map*)> worker);
+        void DoForAllMapsWithMapId(uint32 mapId, const std::function<void(Map*)> worker);
+
+        uint32 GetTransportCounter() const { return m_transportCounter; }
 
     private:
 
@@ -187,24 +182,17 @@ class MapManager : public MaNGOS::Singleton<MapManager, MaNGOS::ClassLevelLockab
         MapMapType i_maps;
         IntervalTimer i_timer;
 
+        std::atomic<uint32> i_MaxInstanceId;
         MapUpdater m_updater;
+        uint32 m_transportCounter;
 };
-
-template<typename Do>
-inline void MapManager::DoForAllMapsWithMapId(uint32 mapId, Do& _do)
-{
-    MapMapType::const_iterator start = i_maps.lower_bound(MapID(mapId, 0));
-    MapMapType::const_iterator end   = i_maps.lower_bound(MapID(mapId + 1, 0));
-    for (MapMapType::const_iterator itr = start; itr != end; ++itr)
-        _do(itr->second);
-}
 
 template<typename Check>
 inline WorldObject* MapManager::SearchOnAllLoadedMap(Check& check)
 {
     for (auto& mapItr : i_maps)
     {
-        WorldObject* result = check(mapItr.second);
+        WorldObject* result = check(mapItr.second.get());
         if (result)
             return result;
     }

@@ -73,6 +73,7 @@
 #include "Anticheat/Anticheat.hpp"
 #include "LFG/LFGMgr.h"
 #include "Vmap/GameObjectModel.h"
+#include "Spells/SpellStacking.h"
 
 #ifdef BUILD_AHBOT
  #include "AuctionHouseBot/AuctionHouseBot.h"
@@ -80,6 +81,12 @@
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
+#endif
+
+#ifdef ENABLE_PLAYERBOTS
+#include "ahbot/AhBot.h"
+#include "playerbot/PlayerbotAIConfig.h"
+#include "playerbot/RandomPlayerbotMgr.h"
 #endif
 
 #include <algorithm>
@@ -101,6 +108,13 @@ uint32 World::m_relocation_ai_notify_delay = 1000u;
 uint32 World::m_currentMSTime = 0;
 TimePoint World::m_currentTime = TimePoint();
 uint32 World::m_currentDiff = 0;
+#ifdef ENABLE_PLAYERBOTS
+uint32 World::m_currentDiffSum = 0;
+uint32 World::m_currentDiffSumIndex = 0;
+uint32 World::m_averageDiff = 0;
+uint32 World::m_maxDiff = 0;
+std::list<uint32> World::m_histDiff;
+#endif
 
 /// World constructor
 World::World() : mail_timer(0), mail_timer_expires(0), m_NextDailyQuestReset(0), m_NextWeeklyQuestReset(0), m_NextMonthlyQuestReset(0), m_opcodeCounters(NUM_MSG_TYPES)
@@ -148,12 +162,18 @@ World::~World()
     VMAP::VMapFactory::clear();
     MMAP::MMapFactory::clear();
 
-    m_lfgQueueThread.join();
+    if (m_lfgQueueThread.joinable())
+        m_lfgQueueThread.join();
+    if (m_bgQueueThread.joinable())
+        m_bgQueueThread.join();
 }
 
 /// Cleanups before world stop
 void World::CleanupsBeforeStop()
 {
+#ifdef ENABLE_PLAYERBOTS
+    sRandomPlayerbotMgr.LogoutAllBots();
+#endif
     KickAll(true);                                   // save and kick all players
     UpdateSessions(1);                               // real players unload required UpdateSessions call
     sBattleGroundMgr.DeleteAllBattleGrounds();       // unload battleground templates before different singletons destroyed
@@ -255,12 +275,6 @@ World::AddSession_(WorldSession* s)
         return;
     }
 
-    WorldPacket pkt(SMSG_CLIENTCACHE_VERSION, 4);
-    pkt << uint32(getConfig(CONFIG_UINT32_CLIENTCACHE_VERSION));
-    s->SendPacket(pkt);
-
-    s->SendTutorialsData();
-
     UpdateMaxSessionCounters();
 
     // Updates the population
@@ -343,12 +357,7 @@ bool World::RemoveQueuedSession(WorldSession* sess)
         pop_sess->SetInQueue(false);
         pop_sess->SendAuthWaitQue(0);
 
-        WorldPacket pkt(SMSG_CLIENTCACHE_VERSION, 4);
-        pkt << uint32(getConfig(CONFIG_UINT32_CLIENTCACHE_VERSION));
-        pop_sess->SendPacket(pkt);
-
         pop_sess->SendAccountDataTimes(GLOBAL_CACHE_MASK);
-        pop_sess->SendTutorialsData();
 
         m_QueuedSessions.pop_front();
 
@@ -511,6 +520,7 @@ void World::LoadConfigSettings(bool reload)
     }
 
     setConfig(CONFIG_BOOL_AUTOLOAD_ACTIVE, "Autoload.Active", true);
+    setConfig(CONFIG_BOOL_SPECIALS_ACTIVE, "Specials.Active", false);
 
     setConfig(CONFIG_UINT32_INTERVAL_SAVE, "PlayerSave.Interval", 15 * MINUTE * IN_MILLISECONDS);
     setConfigMinMax(CONFIG_UINT32_MIN_LEVEL_STAT_SAVE, "PlayerSave.Stats.MinLevel", 0, 0, MAX_LEVEL);
@@ -901,8 +911,11 @@ void World::LoadConfigSettings(bool reload)
 
     setConfig(CONFIG_BOOL_MMAP_ENABLED, "mmap.enabled", true);
     std::string ignoreMapIds = sConfig.GetStringDefault("mmap.ignoreMapIds");
+    setConfig(CONFIG_BOOL_PRELOAD_MMAP_TILES, "mmap.preload", false);
     MMAP::MMapFactory::preventPathfindingOnMaps(ignoreMapIds.c_str());
-    sLog.outString("WORLD: MMap pathfinding %sabled", getConfig(CONFIG_BOOL_MMAP_ENABLED) ? "en" : "dis");
+    bool enabledPathfinding = getConfig(CONFIG_BOOL_MMAP_ENABLED);
+    sLog.outString("WORLD: MMap pathfinding %sabled", enabledPathfinding ? "en" : "dis");
+    MMAP::MMapFactory::createOrGetMMapManager()->SetEnabled(enabledPathfinding);
 
     setConfig(CONFIG_BOOL_PATH_FIND_OPTIMIZE, "PathFinder.OptimizePath", true);
     setConfig(CONFIG_BOOL_PATH_FIND_NORMALIZE_Z, "PathFinder.NormalizeZ", false);
@@ -912,6 +925,8 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_FLOAT_MAX_RECRUIT_A_FRIEND_DISTANCE, "Raf.Distance", 100.f);
 
     setConfig(CONFIG_UINT32_SUNSREACH_COUNTER, "Sunsreach.CounterMax", 10000);
+
+    setConfig(CONFIG_BOOL_REGEN_ZONE_AREA_ON_STARTUP, "Spawns.ZoneArea", false);
 
     sLog.outString();
 }
@@ -971,6 +986,11 @@ void World::SetInitialWorldSettings()
     // load SQL dbcs first, other DBCs need them
     sObjectMgr.LoadSQLDBCs();
 
+    m_bgQueue.SetNextRatingDiscardUpdate(std::chrono::milliseconds(sWorld.getConfig(CONFIG_UINT32_ARENA_RATING_DISCARD_TIMER)));
+
+    sLog.outString("Loading spell groups...");
+    sSpellStacker.LoadSpellGroups();
+
     // Load before npc_text, gossip_menu_option, script_texts
     sLog.outString("Loading broadcast_text...");
     sObjectMgr.LoadBroadcastText();
@@ -983,6 +1003,16 @@ void World::SetInitialWorldSettings()
     LoadDBCStores(m_dataPath);
     DetectDBCLang();
     sObjectMgr.SetDbc2StorageLocaleIndex(GetDefaultDbcLocale());    // Get once for all the locale index of DBC language (console/broadcasts)
+
+    if (VMAP::IVMapManager* vmmgr2 = VMAP::VMapFactory::createOrGetVMapManager()) // after map store init
+    {
+        std::vector<uint32> mapIds;
+        for (uint32 mapId = 0; mapId < sMapStore.GetNumRows(); mapId++)
+            if (sMapStore.LookupEntry(mapId))
+                mapIds.push_back(mapId);
+
+        vmmgr2->InitializeThreadUnsafe(mapIds);
+    }
 
     // Loading cameras for characters creation cinematic
     sLog.outString("Loading cinematic...");
@@ -1007,11 +1037,11 @@ void World::SetInitialWorldSettings()
     sSpellMgr.LoadSkillRaceClassInfoMap();
 
     ///- Clean up and pack instances
-    sLog.outString("Cleaning up instances...");
-    sMapPersistentStateMgr.CleanupInstances();              // must be called before `creature_respawn`/`gameobject_respawn` tables
-
     sLog.outString("Packing instances...");
     sMapPersistentStateMgr.PackInstances();
+
+    sLog.outString("Cleaning up instances...");
+    sMapPersistentStateMgr.CleanupInstances();              // must be called before `creature_respawn`/`gameobject_respawn` tables and after pack instances
 
     sLog.outString("Packing groups...");
     sObjectMgr.PackGroupIds();                              // must be after CleanupInstances
@@ -1023,9 +1053,12 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading Page Texts...");
     sObjectMgr.LoadPageTexts();
 
+    sLog.outString("Loading String Ids...");
+    sScriptMgr.LoadStringIds(); // must be before LoadCreatureSpawnDataTemplates
+
     sLog.outString("Loading Game Object Templates...");     // must be after LoadPageTexts
     std::vector<uint32> transportDisplayIds = sObjectMgr.LoadGameobjectInfo();
-    MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(transportDisplayIds);
+    MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(GetDataPath(), transportDisplayIds);
 
     sLog.outString("Loading GameObject models...");
     GameObjectModel::LoadGOVmapModels();
@@ -1081,9 +1114,6 @@ void World::SetInitialWorldSettings()
 
     sLog.outString("Loading Creature Stats...");
     sObjectMgr.LoadCreatureClassLvlStats();
-
-    sLog.outString("Loading String Ids...");
-    sScriptMgr.LoadStringIds(); // must be before LoadCreatureSpawnDataTemplates
 
     sLog.outString("Loading Creature templates...");
     sObjectMgr.LoadCreatureTemplates();
@@ -1144,6 +1174,12 @@ void World::SetInitialWorldSettings()
 
     sLog.outString("Loading Gameobject Data...");
     sObjectMgr.LoadGameObjects();
+
+    if (getConfig(CONFIG_BOOL_REGEN_ZONE_AREA_ON_STARTUP))
+    {
+        sLog.outString("Generating zone and area ids for creatures and gameobjects...");
+        sObjectMgr.GenerateZoneAndAreaIds();
+    }
 
     sLog.outString("Loading SpellsScriptTarget...");
     sSpellMgr.LoadSpellScriptTarget();                      // must be after LoadCreatureTemplates, LoadCreatures and LoadGameobjectInfo
@@ -1355,10 +1391,10 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadGameObjectForQuests();
 
     sLog.outString("Loading BattleMasters...");
-    sBattleGroundMgr.LoadBattleMastersEntry();
+    sBattleGroundMgr.LoadBattleMastersEntry(false);
 
     sLog.outString("Loading BattleGround event indexes...");
-    sBattleGroundMgr.LoadBattleEventIndexes();
+    sBattleGroundMgr.LoadBattleEventIndexes(false);
 
     sLog.outString("Loading GameTeleports...");
     sObjectMgr.LoadGameTele();
@@ -1428,6 +1464,9 @@ void World::SetInitialWorldSettings()
     // after spellscripts
     sScriptDevAIMgr.CheckScriptNames();
 
+    // after SD2
+    sAchievementMgr.AssignAchievementCriteriaScripts();
+
     ///- Initialize game time and timers
     sLog.outString("Initialize game time and timers");
     m_gameTime = time(nullptr);
@@ -1481,7 +1520,7 @@ void World::SetInitialWorldSettings()
     ///- Initialize Battlegrounds
     sLog.outString("Starting BattleGround System");
     sBattleGroundMgr.CreateInitialBattleGrounds();
-    sBattleGroundMgr.InitAutomaticArenaPointDistribution();
+    m_bgQueue.InitAutomaticArenaPointDistribution();
     CheckLootTemplates_Reference(ids_set);
 
     sLog.outString("Deleting expired bans...");
@@ -1543,6 +1582,14 @@ void World::SetInitialWorldSettings()
 #ifdef BUILD_DEPRECATED_PLAYERBOT
     PlayerbotMgr::SetInitialWorldSettings();
 #endif
+
+#ifdef ENABLE_PLAYERBOTS
+    sPlayerbotAIConfig.Initialize();
+#ifndef BUILD_AHBOT
+    auctionbot.Init();
+#endif
+#endif
+
     sLog.outString("---------------------------------------");
     sLog.outString("      CMANGOS: World initialized       ");
     sLog.outString("---------------------------------------");
@@ -1606,6 +1653,33 @@ void World::Update(uint32 diff)
     m_currentTime = std::chrono::time_point_cast<std::chrono::milliseconds>(Clock::now());
     m_currentDiff = diff;
 
+#ifdef ENABLE_PLAYERBOTS
+    m_currentDiffSum += diff;
+    m_currentDiffSumIndex++;
+
+    m_histDiff.push_back(diff);
+    m_maxDiff = std::max(m_maxDiff, diff);
+
+    while (m_histDiff.size() >= 600)
+    {
+        m_currentDiffSum -= m_histDiff.front();
+        m_histDiff.pop_front();
+    }
+
+    m_averageDiff = (uint32)(m_currentDiffSum / m_histDiff.size());
+
+    if (m_currentDiffSumIndex && m_currentDiffSumIndex % 60 == 0)
+    {
+        sLog.outBasic("Avg Diff: %u. Sessions online: %u.", m_averageDiff, (uint32)GetActiveSessionCount());
+        sLog.outBasic("Max Diff: %u.", m_maxDiff);
+    }
+
+    if (m_currentDiffSum % 3000 == 0)
+    {
+        m_maxDiff = *std::max_element(m_histDiff.begin(), m_histDiff.end());
+    }
+#endif
+
     ///- Update the different timers
     for (auto& m_timer : m_timers)
     {
@@ -1663,6 +1737,19 @@ void World::Update(uint32 diff)
         sAuctionHouseBot.Update();
         m_timers[WUPDATE_AHBOT].Reset();
     }
+#endif
+
+#ifdef ENABLE_PLAYERBOTS
+#ifndef BUILD_AHBOT
+    /// <li> Handle AHBot operations
+    if (m_timers[WUPDATE_AHBOT].Passed())
+    {
+        auctionbot.Update();
+        m_timers[WUPDATE_AHBOT].Reset();
+    }
+#endif
+    sRandomPlayerbotMgr.UpdateAI(diff);
+    sRandomPlayerbotMgr.UpdateSessions(diff);
 #endif
 
     /// <li> Handle session updates
@@ -2107,14 +2194,6 @@ bool World::RemoveBanAccount(BanMode mode, const std::string& source, const std:
         WarnAccount(account, source, message, "UNBAN");
     }
     return true;
-}
-
-void World::StartLFGQueueThread()
-{
-    m_lfgQueueThread = std::thread([&]()
-    {
-        m_lfgQueue.Update();
-    });
 }
 
 void World::BroadcastToGroup(ObjectGuid groupGuid, std::vector<WorldPacket> const& packets)
@@ -2977,4 +3056,20 @@ void World::LoadWorldSafeLocs() const
 {
     sWorldSafeLocsStore.Load(true);
     sLog.outString(">> Loaded %u world safe locs", sWorldSafeLocsStore.GetRecordCount());
+}
+
+void World::StartLFGQueueThread()
+{
+    m_lfgQueueThread = std::thread([&]()
+    {
+        m_lfgQueue.Update();
+    });
+}
+
+void World::StartBGQueueThread()
+{
+    m_bgQueueThread = std::thread([&]()
+    {
+        m_bgQueue.Update();
+    });
 }

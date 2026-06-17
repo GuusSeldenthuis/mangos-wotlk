@@ -32,6 +32,7 @@
 #include "Server/WorldSocket.h"
 #include "Multithreading/Messager.h"
 #include "LFG/LFGDefines.h"
+#include "BattleGround/BattleGroundDefines.h"
 
 #include <atomic>
 #include <map>
@@ -272,6 +273,7 @@ class WorldSession
         void SendOfflineNameQueryResponses();
         void SendNotification(const char* format, ...) const ATTR_PRINTF(2, 3);
         void SendNotification(int32 string_id, ...) const;
+        void SendClientCacheVersion() const;
         void SendPetNameInvalid(uint32 error, const std::string& name, DeclinedName* declinedName) const;
         static WorldPacket BuildLfgJoinResult(LfgJoinResultData joinResult);
         static WorldPacket BuildLfgUpdate(LfgUpdateData const& updateData, bool isGroup);
@@ -300,7 +302,7 @@ class WorldSession
         char const* GetPlayerName() const;
         std::string GetChatType(uint32 type);
         void SetSecurity(AccountTypes security) { _security = security; }
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
         // Players connected without socket are bot
         const std::string GetRemoteAddress() const { return m_socket ? m_socket->GetRemoteAddress() : "disconnected/bot"; }
 #else
@@ -316,7 +318,7 @@ class WorldSession
         void AssignAnticheat(std::unique_ptr<SessionAnticheatInterface>&& anticheat);
         SessionAnticheatInterface* GetAnticheat() const { return m_anticheat.get(); }
 
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
         void SetNoAnticheat();
 #endif
 
@@ -501,6 +503,10 @@ class WorldSession
         // Misc
         void SendKnockBack(Unit* who, float angle, float horizontalSpeed, float verticalSpeed);
         void SendPlaySpellVisual(ObjectGuid guid, uint32 spellArtKit) const;
+
+#ifdef ENABLE_PLAYERBOTS
+        void SendTeleportToObservers(float x, float y, float z, float orientation);
+#endif
 
         void SendAuthOk() const;
         void SendAuthQueued() const;
@@ -1012,6 +1018,10 @@ class WorldSession
         std::deque<uint32> GetOutOpcodeHistory();
         std::deque<uint32> GetIncOpcodeHistory();
 
+#ifdef ENABLE_PLAYERBOTS
+        void HandleBotPackets();
+#endif
+
         Messager<WorldSession>& GetMessager() { return m_messager; }
 
         void SetPacketLogging(bool state);
@@ -1088,7 +1098,6 @@ class WorldSession
 
         std::map<uint32, uint32> m_pendingTimeSyncRequests; // key: counter. value: server time when packet with that counter was sent.
         uint32 m_timeSyncNextCounter;
-        uint32 m_timeSyncTimer;
 
         // Recruit-A-Friend
         uint32 m_recruitingFriendId;

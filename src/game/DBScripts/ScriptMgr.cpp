@@ -164,7 +164,7 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
         }
 
         // generic command args check
-        if (tmp.buddyEntry && !(tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GUID) && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_STRING_ID) == 0)
+        if (tmp.buddyEntry && !(tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GUID) && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_SPAWN_GROUP) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_STRING_ID) == 0)
         {
             if (tmp.IsCreatureBuddy() && !ObjectMgr::GetCreatureTemplate(tmp.buddyEntry))
             {
@@ -195,7 +195,7 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
                 sLog.outErrorDb("Table `%s` has invalid data_flags %u in command %u for script id %u, skipping.", tablename, tmp.data_flags, tmp.command, tmp.id);
                 continue;
             }
-            if ((tmp.data_flags & SCRIPT_FLAG_BUDDY_AS_TARGET) != 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_POOL) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GUID) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GO) == 0 && !tmp.buddyEntry)
+            if ((tmp.data_flags & SCRIPT_FLAG_BUDDY_AS_TARGET) != 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_POOL) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_SPAWN_GROUP) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_STRING_ID) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GUID) == 0 && (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_GO) == 0 && !tmp.buddyEntry)
             {
                 sLog.outErrorDb("Table `%s` has buddy required in data_flags %u in command %u for script id %u, but no buddy defined, skipping.", tablename, tmp.data_flags, tmp.command, tmp.id);
                 continue;
@@ -228,7 +228,7 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
                     auto pool = sPoolMgr.GetPoolCreatures(tmp.searchRadiusOrGuid);
                     if (pool.isEmpty())
                     {
-                        sLog.outErrorDb("Table `%s` for script id %u has go-buddy defined by pool (SCRIPT_FLAG_BUDDY_BY_POOL %u set) but pool %u is empty, skipping.", tablename, tmp.id, tmp.data_flags, tmp.searchRadiusOrGuid);
+                        sLog.outErrorDb("Table `%s` for script id %u has buddy defined by pool (SCRIPT_FLAG_BUDDY_BY_POOL %u set) but pool %u is empty, skipping.", tablename, tmp.id, tmp.data_flags, tmp.searchRadiusOrGuid);
                         continue;
                     }
                 }
@@ -244,10 +244,10 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
             }
             else if (tmp.data_flags & SCRIPT_FLAG_BUDDY_BY_SPAWN_GROUP)
             {
-                uint32 groupEntry = tmp.searchRadiusOrGuid;
+                uint32 groupEntry = tmp.buddyEntry;
                 if (sObjectMgr.GetSpawnGroupContainer()->spawnGroupMap.find(groupEntry) == sObjectMgr.GetSpawnGroupContainer()->spawnGroupMap.end())
                 {
-                    sLog.outErrorDb("Table `%s` for script id %u has go-buddy defined by group (SCRIPT_FLAG_BUDDY_BY_SPAWN_GROUP %u set) but group %u is empty, skipping.", tablename, tmp.id, tmp.data_flags, tmp.searchRadiusOrGuid);
+                    sLog.outErrorDb("Table `%s` for script id %u has buddy defined by group (SCRIPT_FLAG_BUDDY_BY_SPAWN_GROUP %u set) but group %u is empty, skipping.", tablename, tmp.id, tmp.data_flags, tmp.searchRadiusOrGuid);
                     continue;
                 }
             }
@@ -464,6 +464,12 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
                 {
                     sLog.outErrorDb("Table `%s` using nonexistent spell (id: %u) in SCRIPT_COMMAND_REMOVE_AURA or SCRIPT_COMMAND_CAST_SPELL for script id %u, skipping",
                                     tablename, tmp.removeAura.spellId, tmp.id);
+                    continue;
+                }
+                if (tmp.removeAura.defaultOrChargeOrStack > 2)
+                {
+                    sLog.outErrorDb("Table `%s` using invalid defaultOrChargeOrStack (id: %u) in SCRIPT_COMMAND_REMOVE_AURA for script id %u, skipping",
+                        tablename, tmp.removeAura.spellId, tmp.id);
                     continue;
                 }
                 break;
@@ -960,6 +966,13 @@ void ScriptMgr::LoadScripts(ScriptMapType scriptType)
                     continue;
                 }
                 break;
+            case SCRIPT_COMMAND_SET_ANIM_TIER: // 57
+                if (AnimTier(tmp.animTier.animTier) >= AnimTier::Max)
+                {
+                    sLog.outErrorDb("Table `%s` has invalid recall respawn flags assigned %u", tablename, tmp.recallOrRespawnPassenger.recallRespawnFlag);
+                    continue;
+                }
+                break;
             default:
             {
                 sLog.outErrorDb("Table `%s` unknown command %u, skipping", tablename, tmp.command);
@@ -1432,7 +1445,7 @@ std::pair<bool, bool> ScriptAction::GetScriptProcessTargets(WorldObject* origina
             if (origin->GetTypeId() == TYPEID_PLAYER && originalSource && originalSource->GetTypeId() != TYPEID_PLAYER)
                 origin = originalTarget;
 
-            SpawnGroupEntry* entry = m_map->GetMapDataContainer().GetSpawnGroup(m_script->searchRadiusOrGuid);
+            SpawnGroupEntry* entry = m_map->GetMapDataContainer().GetSpawnGroup(m_script->buddyEntry);
             WorldObject* closest = nullptr;
             if (entry->Type == SPAWN_GROUP_CREATURE)
             {
@@ -1508,9 +1521,10 @@ std::pair<bool, bool> ScriptAction::GetScriptProcessTargets(WorldObject* origina
                     buddies.push_back(closest);
             }
             if (m_script->searchRadiusOrGuid > 0)
-                for (WorldObject* buddy : buddies)
-                    if (!buddy->IsWithinDist(origin, m_script->searchRadiusOrGuid))
-                        buddies.erase(std::remove(buddies.begin(), buddies.end(), buddy), buddies.end());
+                buddies.erase(std::remove_if(buddies.begin(), buddies.end(), [&](WorldObject* buddy)
+                {
+                    return !buddy->IsWithinDist(origin, m_script->searchRadiusOrGuid);
+                }), buddies.end());
 
             if (buddies.empty() && m_script->command != SCRIPT_COMMAND_TERMINATE_SCRIPT)
             {
@@ -1831,14 +1845,17 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
             if (LogIfNotUnit(pSource))
                 break;
 
+            Unit* unit = static_cast<Unit*>(pSource);
             Creature* creature = static_cast<Creature*>(pSource);
+
+            std::optional<AnimTier> animTier = m_script->moveTo.flags & 0x1 ? std::make_optional(AnimTier(m_script->textId[1])) : std::nullopt;
 
             if (m_script->textId[0])
             {
                 if (m_script->textId[0] == 1 || m_script->textId[0] == 2 && !creature->GetCreatureGroup())
                 {
                     Position const& respPos = creature->GetRespawnPosition();
-                    creature->GetMotionMaster()->MovePoint(0, respPos, ForcedMovement(m_script->moveTo.forcedMovement), 0.f, true);
+                    creature->GetMotionMaster()->MovePoint(0, respPos, ForcedMovement(m_script->moveTo.forcedMovement), m_script->speed, true, creature->GetObjectGuid(), m_script->moveTo.relayId, animTier);
                 }
                 else if (m_script->textId[0] == 2)
                 {
@@ -1850,34 +1867,29 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
             // Just turn around
             if ((m_script->x == 0.0f && m_script->y == 0.0f && m_script->z == 0.0f) ||
                     // Check point-to-point distance, hence revert effect of bounding radius
-                    ((Unit*)pSource)->IsWithinDist3d(m_script->x, m_script->y, m_script->z, 0.01f - ((Unit*)pSource)->GetObjectBoundingRadius()))
+                unit->IsWithinDist3d(m_script->x, m_script->y, m_script->z, 0.01f - unit->GetObjectBoundingRadius()))
             {
-                ((Unit*)pSource)->SetFacingTo(m_script->o);
+                unit->SetFacingTo(m_script->o);
                 break;
             }
 
             // Change Z cord only
             if (m_script->x == 0.0f && m_script->y == 0.0f && m_script->z != 0.0f)
             {
-                ((Unit*)pSource)->GetMotionMaster()->MovePoint(0, pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ() + m_script->z);
+                unit->GetMotionMaster()->MovePoint(0, Position(pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ() + m_script->z, 0.f), ForcedMovement(m_script->moveTo.forcedMovement), m_script->speed, true, creature->GetObjectGuid(), m_script->moveTo.relayId, animTier);
                 break;
             }
 
             // For command additional teleport the unit
             if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
             {
-                ((Unit*)pSource)->NearTeleportTo(m_script->x, m_script->y, m_script->z, m_script->o != 0.0f ? m_script->o : ((Unit*)pSource)->GetOrientation());
+                unit->NearTeleportTo(m_script->x, m_script->y, m_script->z, m_script->o != 0.0f ? m_script->o : unit->GetOrientation());
                 break;
             }
 
             // Normal Movement
-            if (m_script->moveTo.travelSpeed)
-                ((Unit*)pSource)->GetMotionMaster()->MoveCharge(m_script->x, m_script->y, m_script->z, m_script->moveTo.travelSpeed * 0.01f, 0);
-            else
-            {
-                ((Unit*)pSource)->GetMotionMaster()->Clear();
-                ((Unit*)pSource)->GetMotionMaster()->MovePoint(0, Position(m_script->x, m_script->y, m_script->z, m_script->o), ForcedMovement(m_script->moveTo.forcedMovement), 0.f, true, pTarget ? pTarget->GetObjectGuid() : ObjectGuid(), m_script->moveTo.relayId);
-            }
+            unit->GetMotionMaster()->Clear();
+            unit->GetMotionMaster()->MovePoint(0, Position(m_script->x, m_script->y, m_script->z, m_script->o), ForcedMovement(m_script->moveTo.forcedMovement), m_script->speed, true, pTarget ? pTarget->GetObjectGuid() : ObjectGuid(), m_script->moveTo.relayId, animTier);
             break;
         }
         case SCRIPT_COMMAND_FLAG_SET:                       // 4
@@ -2044,7 +2056,6 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
             float z = m_script->z;
             float o = m_script->o;
             bool run = m_script->textId[0] == 1;
-            uint32 relayId = m_script->textId[1];
 
             TempSpawnSettings settings(pSource, m_script->summonCreature.creatureEntry, x, y, z, o, m_script->summonCreature.despawnDelay ? TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN : TEMPSPAWN_DEAD_DESPAWN, m_script->summonCreature.despawnDelay, (m_script->data_flags& SCRIPT_FLAG_COMMAND_ADDITIONAL) != 0, run, m_script->summonCreature.pathId);
             settings.spawnDataEntry = m_script->textId[3];
@@ -2119,16 +2130,24 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
             if (LogIfNotUnit(pSource))
                 break;
 
-            // Flag Command Additional removes aura by caster
-            if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
+            Unit* uSource = static_cast<Unit*>(pSource);
+            if (m_script->removeAura.defaultOrChargeOrStack == 0)
             {
-                if (LogIfNotUnit(pTarget))
-                    break;
-
-                ((Unit*)pSource)->RemoveAurasByCasterSpell(m_script->removeAura.spellId, pTarget->GetObjectGuid());
+                // Flag Command Additional removes aura by caster
+                if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
+                {
+                    if (LogIfNotUnit(pTarget))
+                        break;
+                    uSource->RemoveAurasByCasterSpell(m_script->removeAura.spellId, pTarget->GetObjectGuid());
+                }
+                else
+                    uSource->RemoveAurasDueToSpell(m_script->removeAura.spellId);
             }
-            else
-                ((Unit*)pSource)->RemoveAurasDueToSpell(m_script->removeAura.spellId);
+            else if (m_script->removeAura.defaultOrChargeOrStack == 1)
+                uSource->RemoveAuraCharge(m_script->removeAura.spellId);
+            else if (m_script->removeAura.defaultOrChargeOrStack == 2)
+                uSource->RemoveAuraStack(m_script->removeAura.spellId);
+
             break;
         }
         case SCRIPT_COMMAND_CAST_SPELL:                     // 15
@@ -2196,13 +2215,13 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                     break;
             }
 
-            PlayPacketParameters params(PLAY_SET);
+            PlayPacketParameters params(PlayPacketSettings::SET);
             if (pSoundTarget)
-                params = PlayPacketParameters(PLAY_TARGET, pSoundTarget);
+                params = PlayPacketParameters(PlayPacketSettings::TARGET, pSoundTarget);
             if (m_script->playSound.flags & 8) // playParameter is zoneId
-                params = PlayPacketParameters(PLAY_ZONE, m_script->playSound.playParameter ? m_script->playSound.playParameter : pSource->GetZoneId());
+                params = PlayPacketParameters(PlayPacketSettings::ZONE, m_script->playSound.playParameter ? m_script->playSound.playParameter : pSource->GetZoneId());
             if (m_script->playSound.flags & 16) // playParameter is areaId
-                params = PlayPacketParameters(PLAY_AREA, m_script->playSound.playParameter ? m_script->playSound.playParameter : pSource->GetAreaId());
+                params = PlayPacketParameters(PlayPacketSettings::AREA, m_script->playSound.playParameter ? m_script->playSound.playParameter : pSource->GetAreaId());
 
             if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
                 pSource->PlayMusic(m_script->playSound.soundId, params);
@@ -2275,16 +2294,17 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                 break;
             }
 
-            uint32 movementType = m_script->movement.movementType;
             uint32 wanderORpathId = m_script->movement.wanderORpathIdORRelayId;
 
             WaypointPathOrigin wp_origin = PATH_NO_PATH;
-            if (m_script->movement.timerOrPassTarget & 0x2)
+            if (m_script->movement.timerOrPassTargetOrCyclic & 0x2)
                 wp_origin = PATH_FROM_WAYPOINT_PATH;
 
             ObjectGuid targetGuid;
 
             ForcedMovement forcedMovement = ForcedMovement(m_script->textId[0]);
+            uint32 movementFlags = (uint32)m_script->textId[1];
+            AnimTier animTier = (AnimTier)m_script->textId[2];
 
             auto fSlot = source->GetFormationSlot();
             if (fSlot)
@@ -2304,7 +2324,7 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                     targetGuid = pTarget->GetObjectGuid();
                 else
                 {
-                    if ((m_script->movement.timerOrPassTarget & 0x1) != 0)
+                    if ((m_script->movement.timerOrPassTargetOrCyclic & 0x1) != 0)
                     {
                         DETAIL_FILTER_LOG(LOG_FILTER_DB_SCRIPT, " DB-SCRIPTS: Process table `%s` id %u, SCRIPT_COMMAND_MOVEMENT called for movement change to %u with source guid %s, pass target true and target nullptr: skipping.", m_table, m_script->id, m_script->movement.movementType, pSource->GetGuidStr().c_str());
                         break;
@@ -2320,16 +2340,27 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                     source->GetMotionMaster()->MoveIdle();
                     break;
                 case RANDOM_MOTION_TYPE:
+                {
+                    if (movementFlags & 0x1) // make it main movegen
+                    {
+                        source->StopMoving();
+                        source->GetMotionMaster()->Clear(false, true);
+                    }
+
                     if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
-                        source->GetMotionMaster()->MoveRandomAroundPoint(pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ(), float(m_script->movement.wanderORpathIdORRelayId), 0.f, m_script->movement.timerOrPassTarget);
+                        source->GetMotionMaster()->MoveRandomAroundPoint(pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ(),
+                                                                         float(m_script->movement.wanderORpathIdORRelayId), 0.f, m_script->movement.timerOrPassTargetOrCyclic,
+                                                                         m_script->textId[0] == 0);
                     else
                     {
                         float respX, respY, respZ, respO, wander_distance;
                         source->GetRespawnCoord(respX, respY, respZ, &respO, &wander_distance);
                         wander_distance = wanderORpathId ? wanderORpathId : wander_distance;
-                        source->GetMotionMaster()->MoveRandomAroundPoint(respX, respY, respZ, wander_distance, 0.f, m_script->movement.timerOrPassTarget);
+                        source->GetMotionMaster()->MoveRandomAroundPoint(respX, respY, respZ, wander_distance, 0.f, m_script->movement.timerOrPassTargetOrCyclic,
+                                                                         m_script->textId[0] == 0);
                     }
                     break;
+                }
                 case WAYPOINT_MOTION_TYPE:
                 {
                     source->StopMoving();
@@ -2343,7 +2374,7 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                     if (m_script->movementFloat.verticalSpeed > 0.f)
                         source->GetMotionMaster()->MovePathAndJumpVerticalSpeed(wanderORpathId, m_script->speed, m_script->movementFloat.verticalSpeed, forcedMovement, targetGuid);
                     else
-                        source->GetMotionMaster()->MovePath(wanderORpathId, wp_origin, forcedMovement, false, m_script->speed, false, targetGuid);
+                        source->GetMotionMaster()->MovePath(wanderORpathId, wp_origin, forcedMovement, m_script->movement.timerOrPassTargetOrCyclic & 0x4, m_script->speed, m_script->movement.timerOrPassTargetOrCyclic & 0x8, targetGuid, m_script->movement.timerOrPassTargetOrCyclic & 0x10 ? std::make_optional(animTier) : std::nullopt);
                     break;
                 }
                 case LINEAR_WP_MOTION_TYPE:
@@ -2417,27 +2448,25 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                 break;
 
             Creature* creatureSource = static_cast<Creature*>(pSource);
-            if (!m_script->mount.creatureOrModelEntry)
+            if (m_script->mount.speedChange) // new flow
             {
-                creatureSource->Unmount();
-                if (m_script->mount.speedChange)
-                {
-                    creatureSource->SetBaseRunSpeed(creatureSource->GetCreatureInfo()->SpeedRun);
-                    creatureSource->UpdateSpeed(MOVE_RUN, true);
-                }
+                if (m_script->mount.creatureOrModelEntry)
+                    creatureSource->MountEntry(m_script->mount.creatureOrModelEntry);
+                else
+                    creatureSource->UnmountEntry();
             }
-            else if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
-                creatureSource->Mount(m_script->mount.creatureOrModelEntry);
             else
             {
-                CreatureInfo const* ci = ObjectMgr::GetCreatureTemplate(m_script->mount.creatureOrModelEntry);
-                uint32 display_id = Creature::ChooseDisplayId(ci);
-
-                creatureSource->Mount(display_id);
-                if (m_script->mount.speedChange)
+                if (!m_script->mount.creatureOrModelEntry)
+                    creatureSource->Unmount();
+                else if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
+                    creatureSource->Mount(m_script->mount.creatureOrModelEntry);
+                else
                 {
-                    creatureSource->SetBaseRunSpeed(ci->SpeedRun);
-                    creatureSource->UpdateSpeed(MOVE_RUN, true);
+                    CreatureInfo const* ci = ObjectMgr::GetCreatureTemplate(m_script->mount.creatureOrModelEntry);
+                    uint32 display_id = Creature::ChooseDisplayId(ci);
+
+                    creatureSource->Mount(display_id);
                 }
             }
 
@@ -2814,7 +2843,14 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                     sLog.outErrorDb(" DB-SCRIPTS: Process table `%s` id %u, _MOVE_DYNAMIC called with maxDist == 0, but resultingSource == resultingTarget (== %s)", m_table, m_script->id, source->GetGuidStr().c_str());
                     break;
                 }
-                pTarget->GetContactPoint(source, x, y, z, m_script->moveDynamic.fixedDist);
+                if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL) // no bounding radius
+                {
+                    pTarget->GetNearPoint2dAt(pTarget->GetPositionX(), pTarget->GetPositionY(), x, y, m_script->moveDynamic.fixedDist, pTarget->GetAngle(source));
+                    if (source)
+                        source->UpdateAllowedPositionZ(x, y, z, pTarget->GetMap()); // update to LOS height if available
+                }
+                else
+                    pTarget->GetContactPoint(source, x, y, z, m_script->moveDynamic.fixedDist);
             }
             else                                            // Calculate position
             {
@@ -2858,9 +2894,9 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
             if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
             {
                 if (m_script->fly.fly)
-                    pSource->SetByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+                    pSource->SetByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_ANIM_TIER, uint8(AnimTier::Hover));
                 else
-                    pSource->RemoveByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+                    pSource->RemoveByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_ANIM_TIER, uint8(AnimTier::Ground));
             }
 
             ((Creature*)pSource)->SetHover(m_script->fly.fly);
@@ -3068,15 +3104,15 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                         break;
                     }
 
-                    FormationEntrySPtr fEntry = std::make_shared<FormationEntry>();
-                    fEntry->GroupId = targetGroup->GetGroupId();
-                    fEntry->Type = static_cast<SpawnGroupFormationType>(m_script->textId[0]);
-                    fEntry->Spread = m_script->x;
-                    fEntry->Options = m_script->textId[1];
-                    fEntry->MovementType = 0;
-                    fEntry->MovementIdOrWander = 0;
-                    fEntry->Comment = "Dynamically created formation!";
-                    fEntry->IsDynamic = true;
+                    FormationEntry fEntry;
+                    fEntry.GroupId = targetGroup->GetGroupId();
+                    fEntry.Type = static_cast<SpawnGroupFormationType>(m_script->textId[0]);
+                    fEntry.Spread = m_script->x;
+                    fEntry.Options = m_script->textId[1];
+                    fEntry.MovementType = 0;
+                    fEntry.MovementIdOrWander = 0;
+                    fEntry.Comment = "Dynamically created formation!";
+                    fEntry.IsDynamic = true;
 
                     targetGroup->SetFormationData(fEntry);
                     break;
@@ -3132,7 +3168,7 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                         break;
                     }
 
-                    targetGroup->SetFormationData(nullptr);
+                    targetGroup->ClearFormationData();
                     break;
                 }
 
@@ -3171,7 +3207,6 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
 
                     Creature* leader = static_cast<Creature*>(pTarget);
 
-                    CreatureGroup* leaderGroup = leader->GetCreatureGroup();
                     FormationSlotDataSPtr leaderSlot = leader->GetFormationSlot();
                     FormationData* leaderFormation = nullptr;
                     if (leaderSlot)
@@ -3205,7 +3240,6 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
 
                     Creature* leader = static_cast<Creature*>(pTarget);
 
-                    CreatureGroup* leaderGroup = leader->GetCreatureGroup();
                     FormationSlotDataSPtr leaderSlot = leader->GetFormationSlot();
                     FormationData* leaderFormation = nullptr;
                     if (leaderSlot)
@@ -3237,7 +3271,6 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
 
                     Creature* leader = static_cast<Creature*>(pTarget);
 
-                    CreatureGroup* leaderGroup = leader->GetCreatureGroup();
                     FormationSlotDataSPtr leaderSlot = leader->GetFormationSlot();
                     FormationData* leaderFormation = nullptr;
                     if (leaderSlot)
@@ -3306,6 +3339,14 @@ bool ScriptAction::ExecuteDbscriptCommand(WorldObject* pSource, WorldObject* pTa
                 static_cast<Unit*>(pSource)->GetVehicleInfo()->RespawnAccessories(seatIndex);
             else if (flags == 3)
                 static_cast<Unit*>(pSource)->GetVehicleInfo()->RecallAndRespawnAccessories(m_script->recallOrRespawnPassenger.searchRadius, seatIndex);
+            break;
+        }
+        case SCRIPT_COMMAND_SET_ANIM_TIER:
+        {
+            if (LogIfNotUnit(pSource))
+                break;
+
+            static_cast<Unit*>(pSource)->SetAnimTier(AnimTier(m_script->animTier.animTier));
             break;
         }
         default:
@@ -3435,47 +3476,6 @@ void ScriptMgr::CollectPossibleEventIds(std::set<uint32>& eventIds)
 std::shared_ptr<ScriptMapMapName> ScriptMgr::GetScriptMap(ScriptMapType scriptMapType)
 {
     return m_scriptMaps[scriptMapType];
-}
-
-// Starters for events
-bool StartEvents_Event(Map* map, uint32 id, Object* source, Object* target, bool isStart/*=true*/)
-{
-    MANGOS_ASSERT(source);
-
-    // Handle SD2 script
-    if (sScriptDevAIMgr.OnProcessEvent(id, source, target, isStart))
-        return true;
-
-    // Handle PvP Calls
-    if (source->IsGameObject() || source->IsUnit())
-    {
-        BattleGround* bg = nullptr;
-        OutdoorPvP* opvp = nullptr;
-        uint32 zoneId = 0;
-        if (source->IsPlayer())
-            zoneId = static_cast<Player*>(source)->GetCachedZoneId();
-        else
-            zoneId = static_cast<WorldObject*>(source)->GetZoneId();
-
-        if (map->IsBattleGroundOrArena())
-            bg = static_cast<BattleGroundMap*>(map)->GetBG();
-        else                                            // Use the go, because GOs don't move
-            opvp = sOutdoorPvPMgr.GetScript(zoneId);
-
-        if (bg && bg->HandleEvent(id, source, target))
-            return true;
-
-        if (opvp && opvp->HandleEvent(id, source, target))
-            return true;
-    }
-
-    Map::ScriptExecutionParam execParam = Map::SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE_TARGET;
-    if (source->isType(TYPEMASK_CREATURE_OR_GAMEOBJECT))
-        execParam = Map::SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE;
-    else if (target && target->isType(TYPEMASK_CREATURE_OR_GAMEOBJECT))
-        execParam = Map::SCRIPT_EXEC_PARAM_UNIQUE_BY_TARGET;
-
-    return map->ScriptsStart(SCRIPT_TYPE_EVENT, id, source, target, execParam);
 }
 
 bool ScriptMgr::ExistsStringId(uint32 stringId)

@@ -1,15 +1,18 @@
-
 name: Windows Build
 
 on: [push]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
-  REPO_DIR : ${{github.workspace}}
+  REPO_DIR: ${{github.workspace}}
   BUILD_DIR: ${{github.workspace}}/bin/builddir
   BOOST_TOOLSET: "msvc"
-  BOOST_VERSION: "1.83.0"
+  BOOST_VERSION: "1.87.0"
   BOOST_PLATFORM_VERSION: "2022"
 
 jobs:
@@ -20,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{env.REPO_DIR}}
 
@@ -32,7 +35,7 @@ jobs:
 
       # install dependencies
       - name: Install Boost
-        uses: MarkusJx/install-boost@v2.4.5
+        uses: MarkusJx/install-boost@v2.6.0
         id: install-boost
         with:
           # REQUIRED: Specify the required boost version
@@ -45,7 +48,7 @@ jobs:
           toolset: ${{env.BOOST_TOOLSET}}
           # NOTE: If a boost version matching all requirements cannot be found,
           # this build step will fail
-          
+
       - name: Configure
         env:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
@@ -54,7 +57,7 @@ jobs:
       - name: Build
         env:
           MAKEFLAGS: "-j8"
-        run: cmake --build ${{env.BUILD_DIR}} --config ${{env.BUILD_TYPE}}
+        run: cmake --build ${{env.BUILD_DIR}} --config ${{env.BUILD_TYPE}} --parallel
 
       - name: Archive Files
         run: |
@@ -62,14 +65,14 @@ jobs:
           7z a -tzip ${{env.ARCHIVE_FILENAME}} x64_Release
 
       - name: Archive The Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: snapshot
           path: "${{env.BUILD_DIR}}/bin/${{env.ARCHIVE_FILENAME}}"
 
   notify:
     name: Send Notification to Discord on Failure
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       contents: none
     needs: # make sure the notification is sent AFTER the jobs you want included have completed
@@ -83,7 +86,7 @@ jobs:
           echo "GIT_SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
 
       - name: Notify
-        uses: rjstone/discord-webhook-notify@v1.1.1
+        uses: rjstone/discord-webhook-notify@v2.2.1
         with:
           severity: error
           description: |

@@ -313,6 +313,7 @@ struct DeathKnightDisease : public AuraScript
     }
 };
 
+// 65142 - Crypt Fever
 struct CryptFeverServerside : public AuraScript
 {
     int32 OnAuraValueCalculate(AuraCalcData& data, int32 value) const override
@@ -561,7 +562,6 @@ struct SummonGargoyle : public SpellScript, public AuraScript
         summon->CastSpell(nullptr, SPELL_DEATH_KNIGHT_PET_SCALING_02, TRIGGERED_NONE);
         summon->CastSpell(nullptr, SPELL_DEATH_KNIGHT_PET_SCALING_03, TRIGGERED_NONE);
         summon->CastSpell(nullptr, SPELL_AVOIDANCE_PASSIVE, TRIGGERED_NONE);
-        // TODO: Figure out cast speed scaling
 
         Unit* target = spell->m_targets.getUnitTarget();
         Position pos = target ? target->GetPosition() : spell->GetCaster()->GetPosition();
@@ -602,7 +602,7 @@ struct GargoyleDeathKnightAI : public CombatAI
         {
             SetCombatScriptStatus(false);
             m_creature->SetHover(true);
-            m_creature->SetByteFlag(UNIT_FIELD_BYTES_1, UNIT_BYTES_1_OFFSET_MISC_FLAGS, UNIT_BYTE1_FLAG_FLY_ANIM);
+            m_creature->SetAnimTier(AnimTier::Hover);
         }
     }
 };
@@ -716,7 +716,7 @@ struct ObliterateDK : public SpellScript
         // in official data, supposedly removed eff 1 is not removed, effect 0 that worked differently isnt removed, and actual functionality is stored in eff2
         if (effIdx == EFFECT_INDEX_1)
             if (Aura* glyphOfObliterate = spell->GetCaster()->GetAura(58671, EFFECT_INDEX_1))
-                spell->SetDamageDoneModifier(glyphOfObliterate->GetSpellProto()->CalculateSimpleValue(EFFECT_INDEX_2), EFFECT_INDEX_1);
+                spell->SetDamageDoneModifier(float(glyphOfObliterate->GetSpellProto()->CalculateSimpleValue(EFFECT_INDEX_2)) / 100, EFFECT_INDEX_1);
     }
 };
 

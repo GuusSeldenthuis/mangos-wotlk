@@ -32,8 +32,9 @@ struct PeriodicTriggerData
     Unit* caster; Unit* target; WorldObject* targetObject;
     SpellEntry const* spellInfo;
     int32* basePoints;
+    uint32 triggerFlags;
     PeriodicTriggerData(WorldObject* trueCaster, Unit* caster, Unit* target, WorldObject* targetObject, SpellEntry const* spellInfo, int32* basePoints) :
-        trueCaster(trueCaster), caster(caster), target(target), targetObject(targetObject), spellInfo(spellInfo), basePoints(basePoints) {}
+        trueCaster(trueCaster), caster(caster), target(target), targetObject(targetObject), spellInfo(spellInfo), basePoints(basePoints), triggerFlags(TRIGGERED_OLD_TRIGGERED) {}
 };
 
 struct SpellScript
@@ -79,7 +80,7 @@ struct AuraCalcData
 {
     Unit* caster; Unit* target; SpellEntry const* spellProto; SpellEffectIndex effIdx; Item* castItem;
     Aura* aura; // cannot be used in auras that utilize stacking in checkcast - can be nullptr
-    AuraCalcData(Aura* aura, Unit* caster, Unit* target, SpellEntry const* spellProto, SpellEffectIndex effIdx, Item* castItem) : caster(caster), target(target), spellProto(spellProto), effIdx(effIdx), aura(aura), castItem(castItem) {}
+    AuraCalcData(Aura* aura, Unit* caster, Unit* target, SpellEntry const* spellProto, SpellEffectIndex effIdx, Item* castItem) : caster(caster), target(target), spellProto(spellProto), effIdx(effIdx), castItem(castItem), aura(aura) {}
 };
 
 struct AuraScript
@@ -132,7 +133,7 @@ struct AuraScript
     // called on unit heartbeat
     virtual void OnHeartbeat(Aura* /*aura*/) const {}
     // called on AreaAura target checking
-    virtual bool OnAreaAuraCheckTarget(Aura const* aura, Unit* target) const { return true; }
+    virtual bool OnAreaAuraCheckTarget(Aura const* /*aura*/, Unit* /*target*/) const { return true; }
     // called on affect check of aura - spellInfo can be nullptr in case of melee
     virtual bool OnAffectCheck(Aura const* /*aura*/, SpellEntry const* /*spellInfo*/) const { return true; }
     // used to override SPELL_AURA_TRANSFORM or SPELL_AURA_MOD_SHAPESHIFT display id - more uses in future

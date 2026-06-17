@@ -57,9 +57,13 @@ target_link_libraries(${EXECUTABLE_NAME}
   game
   gsoap
   g3dlite
+  cmangos-compile-option-interface
 )
 
 if(WIN32)
+  target_link_libraries(${EXECUTABLE_NAME}
+    winmm
+  )
   if(MSVC)
     target_link_libraries(${EXECUTABLE_NAME}
       dbghelp
@@ -73,10 +77,7 @@ if(WIN32)
   endif()
 
   # Define OutDir to source/bin/(platform)_(configuaration) folder.
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${DEV_BIN_DIR}")
+  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${DEV_BIN_DIR}")
   set_target_properties(${EXECUTABLE_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${DEV_BIN_DIR}")
   set_target_properties(${EXECUTABLE_NAME} PROPERTIES PROJECT_LABEL "WorldServer")
 
@@ -88,8 +89,7 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${CMAKE_SOURCE_DIR}/src/game/Anticheat/module/anticheat.conf.dist.in\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/anticheat.conf.dist\")
 
   add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/game/Anticheat/module/warden_modules/ $<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/warden_modules
-    DEPENDS ${EXECUTABLE_NAME})
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/game/Anticheat/module/warden_modules/ $<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/warden_modules)
 	
   if(BUILD_DEPRECATED_PLAYERBOT)
     add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
@@ -136,7 +136,7 @@ if (BUILD_AHBOT)
 endif()
 
 if(MSVC)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/\${BUILD_TYPE}/${EXECUTABLE_NAME}.pdb DESTINATION ${BIN_DIR} CONFIGURATIONS Debug)
+  install(FILES $<TARGET_PDB_FILE:${EXECUTABLE_NAME}> DESTINATION ${BIN_DIR} CONFIGURATIONS Debug)
 endif()
 
 install(FILES ${CMAKE_SOURCE_DIR}/src/game/Anticheat/module/anticheat.conf.dist.in DESTINATION ${CONF_DIR} RENAME anticheat.conf.dist)

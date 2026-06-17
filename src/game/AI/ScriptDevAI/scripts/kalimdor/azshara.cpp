@@ -26,7 +26,6 @@ npc_rizzle_sprysprocket
 npc_depth_charge
 go_southfury_moonstone
 mobs_spitelashes
-npc_loramus_thalipedes
 npc_felhound_tracker
 event_arcanite_buoy
 go_lightning
@@ -405,63 +404,6 @@ UnitAI* GetAI_mobs_spitelashes(Creature* pCreature)
 }
 
 /*######
-## npc_loramus_thalipedes
-######*/
-
-bool GossipHello_npc_loramus_thalipedes(Player* pPlayer, Creature* pCreature)
-{
-    if (pCreature->isQuestGiver())
-        pPlayer->PrepareQuestMenu(pCreature->GetObjectGuid());
-
-    if (pPlayer->GetQuestStatus(2744) == QUEST_STATUS_INCOMPLETE)
-        pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Can you help me?", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-
-    if (pPlayer->GetQuestStatus(3141) == QUEST_STATUS_INCOMPLETE)
-        pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Tell me your story", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-
-    pPlayer->SEND_GOSSIP_MENU(pPlayer->GetGossipTextId(pCreature), pCreature->GetObjectGuid());
-
-    return true;
-}
-
-bool GossipSelect_npc_loramus_thalipedes(Player* pPlayer, Creature* pCreature, uint32 /*uiSender*/, uint32 uiAction)
-{
-    switch (uiAction)
-    {
-        case GOSSIP_ACTION_INFO_DEF+1:
-            pPlayer->CLOSE_GOSSIP_MENU();
-            pPlayer->AreaExploredOrEventHappens(2744);
-            break;
-
-        case GOSSIP_ACTION_INFO_DEF+2:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Please continue", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 21);
-            pPlayer->SEND_GOSSIP_MENU(1813, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+21:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I do not understand", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 22);
-            pPlayer->SEND_GOSSIP_MENU(1814, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+22:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Indeed", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 23);
-            pPlayer->SEND_GOSSIP_MENU(1815, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+23:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I will do this with or your help, Loramus", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 24);
-            pPlayer->SEND_GOSSIP_MENU(1816, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+24:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Yes", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 25);
-            pPlayer->SEND_GOSSIP_MENU(1817, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+25:
-            pPlayer->CLOSE_GOSSIP_MENU();
-            pPlayer->AreaExploredOrEventHappens(3141);
-            break;
-    }
-    return true;
-}
-
-/*######
 ## npc_felhound_tracker
 ######*/
 
@@ -698,7 +640,7 @@ struct boss_mawsAI : public ScriptedAI
         uiFrenzyTimer           = 25 * IN_MILLISECONDS;
         uiDarkWaterTimer        = 15 * IN_MILLISECONDS;
         uiRampageTimer          = urand(20, 120) * IN_MILLISECONDS;
-        uiDespawnTimer          = 2.5 * HOUR * IN_MILLISECONDS;
+        uiDespawnTimer          = 150 * MINUTE * IN_MILLISECONDS;
 
         DoCastSpellIfCan(nullptr, SPELL_THRASH, CAST_TRIGGERED | CAST_AURA_NOT_PRESENT);
     }
@@ -788,12 +730,6 @@ void AddSC_azshara()
     pNewScript = new Script;
     pNewScript->Name = "mobs_spitelashes";
     pNewScript->GetAI = &GetAI_mobs_spitelashes;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
-    pNewScript->Name = "npc_loramus_thalipedes";
-    pNewScript->pGossipHello =  &GossipHello_npc_loramus_thalipedes;
-    pNewScript->pGossipSelect = &GossipSelect_npc_loramus_thalipedes;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;

@@ -17,15 +17,13 @@
 /* ScriptData
 SDName: Tanaris
 SD%Complete: 80
-SDComment: Quest support: 648, 1560, 2954, 4005, 10277.
+SDComment: Quest support: 648, 1560, 2954, 4005.
 SDCategory: Tanaris
 EndScriptData */
 
 /* ContentData
 mob_aquementas
-npc_custodian_of_time
 npc_oox17tn
-npc_stone_watcher_of_norgannon
 npc_tooga
 EndContentData */
 
@@ -130,95 +128,6 @@ struct mob_aquementasAI : public ScriptedAI
 UnitAI* GetAI_mob_aquementas(Creature* pCreature)
 {
     return new mob_aquementasAI(pCreature);
-}
-
-/*######
-## npc_custodian_of_time
-######*/
-
-enum
-{
-    WHISPER_CUSTODIAN_1         = -1000217,
-    WHISPER_CUSTODIAN_2         = -1000218,
-    WHISPER_CUSTODIAN_3         = -1000219,
-    WHISPER_CUSTODIAN_4         = -1000220,
-    WHISPER_CUSTODIAN_5         = -1000221,
-    WHISPER_CUSTODIAN_6         = -1000222,
-    WHISPER_CUSTODIAN_7         = -1000223,
-    WHISPER_CUSTODIAN_8         = -1000224,
-    WHISPER_CUSTODIAN_9         = -1000225,
-    WHISPER_CUSTODIAN_10        = -1000226,
-    WHISPER_CUSTODIAN_11        = -1000227,
-    WHISPER_CUSTODIAN_12        = -1000228,
-    WHISPER_CUSTODIAN_13        = -1000229,
-    WHISPER_CUSTODIAN_14        = -1000230,
-
-    SPELL_CUSTODIAN_OF_TIME     = 34877,
-    SPELL_QID_10277             = 34883,
-
-    QUEST_ID_CAVERNS_OF_TIME    = 10277,
-};
-
-struct npc_custodian_of_timeAI : public npc_escortAI
-{
-    npc_custodian_of_timeAI(Creature* pCreature) : npc_escortAI(pCreature) { Reset(); }
-
-    void WaypointReached(uint32 uiPointId) override
-    {
-        Player* pPlayer = GetPlayerForEscort();
-
-        if (!pPlayer)
-            return;
-
-        switch (uiPointId)
-        {
-            case 1: DoScriptText(WHISPER_CUSTODIAN_1, m_creature, pPlayer); break;
-            case 2: DoScriptText(WHISPER_CUSTODIAN_2, m_creature, pPlayer); break;
-            case 3: DoScriptText(WHISPER_CUSTODIAN_3, m_creature, pPlayer); break;
-            case 4: DoScriptText(WHISPER_CUSTODIAN_4, m_creature, pPlayer); break;
-            case 6: DoScriptText(WHISPER_CUSTODIAN_5, m_creature, pPlayer); break;
-            case 7: DoScriptText(WHISPER_CUSTODIAN_6, m_creature, pPlayer); break;
-            case 8: DoScriptText(WHISPER_CUSTODIAN_7, m_creature, pPlayer); break;
-            case 9: DoScriptText(WHISPER_CUSTODIAN_8, m_creature, pPlayer); break;
-            case 10: DoScriptText(WHISPER_CUSTODIAN_9, m_creature, pPlayer); break;
-            case 11: DoScriptText(WHISPER_CUSTODIAN_4, m_creature, pPlayer); break;
-            case 14: DoScriptText(WHISPER_CUSTODIAN_10, m_creature, pPlayer); break;
-            case 15: DoScriptText(WHISPER_CUSTODIAN_4, m_creature, pPlayer); break;
-            case 17: DoScriptText(WHISPER_CUSTODIAN_11, m_creature, pPlayer); break;
-            case 18: DoScriptText(WHISPER_CUSTODIAN_12, m_creature, pPlayer); break;
-            case 19: DoScriptText(WHISPER_CUSTODIAN_4, m_creature, pPlayer); break;
-            case 23: DoScriptText(WHISPER_CUSTODIAN_13, m_creature, pPlayer); break;
-            case 24: DoScriptText(WHISPER_CUSTODIAN_4, m_creature, pPlayer); break;
-            case 25:
-                DoScriptText(WHISPER_CUSTODIAN_14, m_creature, pPlayer);
-                DoCastSpellIfCan(pPlayer, SPELL_QID_10277);
-                break;
-        }
-    }
-
-    void MoveInLineOfSight(Unit* pWho) override
-    {
-        if (HasEscortState(STATE_ESCORT_ESCORTING))
-            return;
-
-        if (pWho->GetTypeId() == TYPEID_PLAYER)
-        {
-            if (pWho->HasAura(SPELL_CUSTODIAN_OF_TIME) && ((Player*)pWho)->GetQuestStatus(QUEST_ID_CAVERNS_OF_TIME) == QUEST_STATUS_INCOMPLETE)
-            {
-                float fRadius = 10.0f;
-
-                if (m_creature->IsWithinDistInMap(pWho, fRadius))
-                    Start(false, (Player*)pWho);
-            }
-        }
-    }
-
-    void Reset() override { }
-};
-
-UnitAI* GetAI_npc_custodian_of_time(Creature* pCreature)
-{
-    return new npc_custodian_of_timeAI(pCreature);
 }
 
 /*######
@@ -332,62 +241,6 @@ bool QuestAccept_npc_oox17tn(Player* pPlayer, Creature* pCreature, const Quest* 
 
         if (npc_oox17tnAI* pEscortAI = dynamic_cast<npc_oox17tnAI*>(pCreature->AI()))
             pEscortAI->Start(false, pPlayer, pQuest);
-    }
-    return true;
-}
-
-/*######
-## npc_stone_watcher_of_norgannon
-######*/
-
-#define GOSSIP_ITEM_NORGANNON_1     "What function do you serve?"
-#define GOSSIP_ITEM_NORGANNON_2     "What are the Plates of Uldum?"
-#define GOSSIP_ITEM_NORGANNON_3     "Where are the Plates of Uldum?"
-#define GOSSIP_ITEM_NORGANNON_4     "Excuse me? We've been \"reschedueled for visitations\"? What does that mean?!"
-#define GOSSIP_ITEM_NORGANNON_5     "So, what's inside Uldum?"
-#define GOSSIP_ITEM_NORGANNON_6     "I will return when i have the Plates of Uldum."
-
-bool GossipHello_npc_stone_watcher_of_norgannon(Player* pPlayer, Creature* pCreature)
-{
-    if (pCreature->isQuestGiver())
-        pPlayer->PrepareQuestMenu(pCreature->GetObjectGuid());
-
-    if (pPlayer->GetQuestStatus(2954) == QUEST_STATUS_INCOMPLETE)
-        pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-
-    pPlayer->SEND_GOSSIP_MENU(1674, pCreature->GetObjectGuid());
-
-    return true;
-}
-
-bool GossipSelect_npc_stone_watcher_of_norgannon(Player* pPlayer, Creature* pCreature, uint32 /*uiSender*/, uint32 uiAction)
-{
-    switch (uiAction)
-    {
-        case GOSSIP_ACTION_INFO_DEF:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-            pPlayer->SEND_GOSSIP_MENU(1675, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+1:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_3, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-            pPlayer->SEND_GOSSIP_MENU(1676, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+2:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_4, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-            pPlayer->SEND_GOSSIP_MENU(1677, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+3:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_5, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
-            pPlayer->SEND_GOSSIP_MENU(1678, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+4:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_NORGANNON_6, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 5);
-            pPlayer->SEND_GOSSIP_MENU(1679, pCreature->GetObjectGuid());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+5:
-            pPlayer->CLOSE_GOSSIP_MENU();
-            pPlayer->AreaExploredOrEventHappens(2954);
-            break;
     }
     return true;
 }
@@ -559,20 +412,9 @@ void AddSC_tanaris()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
-    pNewScript->Name = "npc_custodian_of_time";
-    pNewScript->GetAI = &GetAI_npc_custodian_of_time;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
     pNewScript->Name = "npc_oox17tn";
     pNewScript->GetAI = &GetAI_npc_oox17tn;
     pNewScript->pQuestAcceptNPC = &QuestAccept_npc_oox17tn;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
-    pNewScript->Name = "npc_stone_watcher_of_norgannon";
-    pNewScript->pGossipHello =  &GossipHello_npc_stone_watcher_of_norgannon;
-    pNewScript->pGossipSelect = &GossipSelect_npc_stone_watcher_of_norgannon;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;

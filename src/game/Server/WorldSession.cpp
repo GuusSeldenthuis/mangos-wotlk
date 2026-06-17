@@ -54,6 +54,10 @@
 #include "PlayerBot/Base/PlayerbotAI.h"
 #endif
 
+#ifdef ENABLE_PLAYERBOTS
+#include "playerbot/playerbot.h"
+#endif
+
 // select opcodes appropriate for processing in Map::Update context for current session state
 static bool MapSessionFilterHelper(WorldSession* session, OpcodeHandler const& opHandle)
 {
@@ -100,7 +104,7 @@ WorldSession::WorldSession(uint32 id, WorldSocket* sock, AccountTypes sec, uint8
     m_inQueue(false), m_playerLoading(false), m_kickSession(false), m_playerLogout(false), m_playerRecentlyLogout(false), m_playerSave(true),
     m_sessionDbcLocale(sWorld.GetAvailableDbcLocale(locale)), m_sessionDbLocaleIndex(sObjectMgr.GetStorageLocaleIndexFor(locale)),
     m_latency(0), m_clientTimeDelay(0), m_tutorialState(TUTORIALDATA_UNCHANGED), m_sessionState(WORLD_SESSION_STATE_CREATED),
-    m_timeSyncClockDeltaQueue(6), m_timeSyncClockDelta(0), m_pendingTimeSyncRequests(), m_timeSyncNextCounter(0), m_timeSyncTimer(0),
+    m_timeSyncClockDeltaQueue(6), m_timeSyncClockDelta(0), m_pendingTimeSyncRequests(), m_timeSyncNextCounter(0),
     m_requestSocket(nullptr), m_recruitingFriendId(recruitingFriend), m_isRecruiter(isARecruiter) {}
 
 /// WorldSession destructor
@@ -200,7 +204,7 @@ void WorldSession::SetExpansion(uint8 expansion)
 /// Send a packet to the client
 void WorldSession::SendPacket(WorldPacket const& packet) const
 {
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
     // Send packet to bot AI
     if (GetPlayer())
     {
@@ -392,7 +396,7 @@ bool WorldSession::Update(uint32 /*diff*/)
 
                 // lag can cause STATUS_LOGGEDIN opcodes to arrive after the player started a transfer
 
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
                 if (_player && _player->GetPlayerbotMgr())
                     _player->GetPlayerbotMgr()->HandleMasterIncomingPacket(*packet);
 #endif
@@ -472,6 +476,11 @@ bool WorldSession::Update(uint32 /*diff*/)
     }
 #endif
 
+#ifdef ENABLE_PLAYERBOTS
+    if (GetPlayer() && GetPlayer()->GetPlayerbotMgr())
+        GetPlayer()->GetPlayerbotMgr()->UpdateSessions(0);
+#endif
+
     // check if we are safe to proceed with logout
     // logout procedure should happen only in World::UpdateSessions() method!!!
     switch (m_sessionState)
@@ -487,15 +496,15 @@ bool WorldSession::Update(uint32 /*diff*/)
                 m_socket = m_requestSocket;
                 m_requestSocket = nullptr;
                 sLog.outDetail("New Session key %s", m_socket->GetSessionKey().AsHexStr());
-                SendAuthOk();
             }
+            
+            if (m_inQueue)
+                SendAuthQueued();
             else
-            {
-                if (m_inQueue)
-                    SendAuthQueued();
-                else
-                    SendAuthOk();
-            }
+                SendAuthOk();
+
+            SendClientCacheVersion();
+            SendTutorialsData();
             SetInCharSelection();
             return true;
         }
@@ -580,6 +589,33 @@ void WorldSession::UpdateMap(uint32 diff)
     }
 }
 
+#ifdef ENABLE_PLAYERBOTS
+void WorldSession::HandleBotPackets()
+{
+    while (!m_recvQueue.empty())
+    {
+        if (_player)
+            _player->SetCanDelayTeleport(true);
+
+        auto const packet = std::move(m_recvQueue.front());
+        m_recvQueue.pop_front();
+        OpcodeHandler const& opHandle = opcodeTable[packet->GetOpcode()];
+        (this->*opHandle.handler)(*packet);
+
+        if (_player)
+        {
+            // can be not set in fact for login opcode, but this not create problems.
+            _player->SetCanDelayTeleport(false);
+
+            // we should execute delayed teleports only for alive(!) players
+            // because we don't want player's ghost teleported from graveyard
+            if (_player->IsHasDelayedTeleport())
+                _player->TeleportTo(_player->m_teleport_dest, _player->m_teleport_options);
+        }
+    }
+}
+#endif
+
 /// %Log the player out
 void WorldSession::LogoutPlayer()
 {
@@ -601,7 +637,16 @@ void WorldSession::LogoutPlayer()
             _player->GetPlayerbotMgr()->LogoutAllBots(true);
 #endif
 
+#ifdef ENABLE_PLAYERBOTS
+        if (_player->GetPlayerbotMgr() && (!_player->GetPlayerbotAI() || _player->GetPlayerbotAI()->IsRealPlayer()))
+            _player->GetPlayerbotMgr()->LogoutAllBots();
+
+        sRandomPlayerbotMgr.OnPlayerLogout(_player);
+
+        sLog.outChar("Account: %d (IP: %s) Logout Character:[%s] (guid: %u)", GetAccountId(), m_socket ? GetRemoteAddress().c_str() : "bot", _player->GetName(), _player->GetGUIDLow());
+#else
         sLog.outChar("Account: %d (IP: %s) Logout Character:[%s] (guid: %u)", GetAccountId(), GetRemoteAddress().c_str(), _player->GetName(), _player->GetGUIDLow());
+#endif
 
         if (Loot* loot = sLootMgr.GetLoot(_player))
             loot->Release(_player);
@@ -651,7 +696,10 @@ void WorldSession::LogoutPlayer()
             if (BattleGroundQueueTypeId bgQueueTypeId = _player->GetBattleGroundQueueTypeId(i))
             {
                 _player->RemoveBattleGroundQueueId(bgQueueTypeId);
-                sBattleGroundMgr.m_battleGroundQueues[ bgQueueTypeId ].RemovePlayer(_player->GetObjectGuid(), true);
+                sWorld.GetBGQueue().GetMessager().AddMessage([bgQueueTypeId, playerGuid = _player->GetObjectGuid()](BattleGroundQueue* queue)
+                {
+                    queue->RemovePlayer(bgQueueTypeId, playerGuid, true);
+                });
             }
         }
 
@@ -677,8 +725,11 @@ void WorldSession::LogoutPlayer()
             stmt.PExecute(uint32(0), GetAccountId());
         }
 #else
-        SqlStatement stmt = LoginDatabase.CreateStatement(id, "UPDATE account SET active_realm_id = ? WHERE id = ?");
-        stmt.PExecute(uint32(0), GetAccountId());
+        // Scope for SqlStatement.
+        {
+            SqlStatement stmt = LoginDatabase.CreateStatement(id, "UPDATE account SET active_realm_id = ? WHERE id = ?");
+            stmt.PExecute(uint32(0), GetAccountId());
+        }
 #endif
 
         ///- If the player is in a guild, update the guild roster and broadcast a logout message to other guild members
@@ -726,7 +777,7 @@ void WorldSession::LogoutPlayer()
         // GM ticket notification
         sTicketMgr.OnPlayerOnlineState(*_player, false);
 
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
         // Remember player GUID for update SQL below
         uint32 guid = _player->GetGUIDLow();
 #endif
@@ -758,7 +809,7 @@ void WorldSession::LogoutPlayer()
 
         static SqlStatementID updChars;
 
-#ifdef BUILD_DEPRECATED_PLAYERBOT
+#if defined(BUILD_DEPRECATED_PLAYERBOT) || defined(ENABLE_PLAYERBOTS)
         // Set for only character instead of accountid
         // Different characters can be alive as bots
         SqlStatement stmt = CharacterDatabase.CreateStatement(updChars, "UPDATE characters SET online = 0 WHERE guid = ?");
@@ -766,7 +817,7 @@ void WorldSession::LogoutPlayer()
 #else
         ///- Since each account can only have one online character at any given time, ensure all characters for active account are marked as offline
         // No SQL injection as AccountId is uint32
-        stmt = CharacterDatabase.CreateStatement(updChars, "UPDATE characters SET online = 0 WHERE account = ?");
+        SqlStatement stmt = CharacterDatabase.CreateStatement(updChars, "UPDATE characters SET online = 0 WHERE account = ?");
         stmt.PExecute(GetAccountId());
 #endif
 
@@ -795,9 +846,9 @@ void WorldSession::LogoutPlayer()
 /// Kick a player out of the World
 void WorldSession::KickPlayer(bool save, bool inPlace)
 {
-    m_playerSave = save;
     if (inPlace)
     {
+        m_playerSave = save;
         m_kickSession = true;
         LogoutPlayer();
         return;
@@ -815,9 +866,9 @@ void WorldSession::KickPlayer(bool save, bool inPlace)
             botMgr->LogoutPlayerBot(_player->GetObjectGuid());
     }
     else
-        LogoutRequest(time(nullptr) - 20, false);
+        LogoutRequest(time(nullptr) - 20, save);
 #else
-    LogoutRequest(time(nullptr) - 20, false, true);
+    LogoutRequest(time(nullptr) - 20, save, true);
 #endif
 }
 
@@ -1151,7 +1202,7 @@ void WorldSession::SendTransferAborted(uint32 mapid, uint8 reason, uint8 arg) co
 
 void WorldSession::SendRedirectClient(std::string& ip, uint16 port) const
 {
-    const uint32 ip2 = static_cast<uint32>(boost::asio::ip::address_v4::from_string(ip).to_ulong());
+    const uint32 ip2 = static_cast<uint32>(boost::asio::ip::make_address_v4(ip).to_uint());
     WorldPacket pkt(SMSG_CONNECT_TO, 4 + 2 + 4 + 20);
 
     pkt << uint32(ip2);                                     // inet_addr(ipstr)
@@ -1275,9 +1326,14 @@ void WorldSession::SendTimeSync()
 
     m_pendingTimeSyncRequests[m_timeSyncNextCounter] = WorldTimer::getMSTime();
 
-    // Schedule next sync in 10 sec (except for the 2 first packets, which are spaced by only 5s)
-    m_timeSyncTimer = m_timeSyncNextCounter == 0 ? 5000 : 10000;
     m_timeSyncNextCounter++;
+}
+
+void WorldSession::SendClientCacheVersion() const
+{
+    WorldPacket pkt(SMSG_CLIENTCACHE_VERSION, 4);
+    pkt << uint32(sWorld.getConfig(CONFIG_UINT32_CLIENTCACHE_VERSION));
+    SendPacket(pkt);
 }
 
 void WorldSession::InitializeAnticheat(const BigNumber& K)
@@ -1311,3 +1367,9 @@ void WorldSession::HandleWardenDataOpcode(WorldPacket& recv_data)
 {
     m_anticheat->WardenPacket(recv_data);
 }
+#ifdef ENABLE_PLAYERBOTS
+void WorldSession::SetNoAnticheat()
+{
+    m_anticheat.reset(new NullSessionAnticheat(this));
+}
+#endif

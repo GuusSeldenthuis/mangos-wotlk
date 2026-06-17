@@ -24,6 +24,7 @@
 #include "Maps/Map.h"
 #include "Util/ByteBuffer.h"
 #include "Entities/ObjectGuid.h"
+#include "BattleGround/BattleGroundDefines.h"
 
 // magic event-numbers
 #define BG_EVENT_NONE 255
@@ -269,27 +270,6 @@ enum BattleGroundStartingEventsIds
 };
 #define BG_STARTING_EVENT_COUNT 4
 
-enum BattleGroundGroupJoinStatus
-{
-    // positive values are indexes in BattlemasterList.dbc
-    BG_GROUP_JOIN_STATUS_BATTLEGROUND_FAIL          = 0,            // Your group has joined a battleground queue, but you are not eligible (showed for non existing BattlemasterList.dbc indexes)
-    BG_GROUP_JOIN_STATUS_NOT_ELIGIBLE               = -1,           // not show anything
-    BG_GROUP_JOIN_STATUS_DESERTERS                  = -2,           // You cannot join the battleground yet because you or one of your party members is flagged as a Deserter.
-    BG_GROUP_JOIN_STATUS_NOT_IN_TEAM                = -3,           // Incorrect party size for this arena.
-    BG_GROUP_JOIN_STATUS_TOO_MANY_QUEUES            = -4,           // You can only be queued for 2 battles at once
-    BG_GROUP_JOIN_STATUS_CANNOT_QUEUE_FOR_RATED     = -5,           // You cannot queue for a rated match while queued for other battles
-    BG_GROUP_JOIN_STATUS_QUEUED_FOR_RATED           = -6,           // You cannot queue for another battle while queued for a rated arena match
-    BG_GROUP_JOIN_STATUS_TEAM_LEFT_QUEUE            = -7,           // Your team has left the arena queue
-    BG_GROUP_JOIN_STATUS_NOT_IN_BATTLEGROUND        = -8,           // You can't do that in a battleground.
-    BG_GROUP_JOIN_STATUS_XP_GAIN                    = -9,           // wtf, doesn't exist in client...
-    BG_GROUP_JOIN_STATUS_JOIN_RANGE_INDEX           = -10,          // Cannot join the queue unless all members of your party are in the same battleground level range.
-    BG_GROUP_JOIN_STATUS_JOIN_TIMED_OUT             = -11,          // %s was unavailable to join the queue. (uint64 guid exist in client cache)
-    BG_GROUP_JOIN_STATUS_JOIN_FAILED                = -12,          // Join as a group failed (uint64 guid doesn't exist in client cache)
-    BG_GROUP_JOIN_STATUS_LFG_CANT_USE_BATTLEGROUND  = -13,          // You cannot queue for a battleground or arena while using the dungeon system.
-    BG_GROUP_JOIN_STATUS_IN_RANDOM_BG               = -14,          // Can't do that while in a Random Battleground queue.
-    BG_GROUP_JOIN_STATUS_IN_NON_RANDOM_BG           = -15,          // Can't queue for Random Battleground while in another Battleground queue.
-};
-
 /*
  This class is used to keep the battleground score for each individual player
 */
@@ -382,7 +362,7 @@ class BattleGround
         void SetRandomTypeId(BattleGroundTypeId typeId) { m_randomTypeId = typeId; }
         // here we can count minlevel and maxlevel for players
         void SetBracket(PvPDifficultyEntry const* bracketEntry);
-        void SetStatus(BattleGroundStatus status) { m_status = status; }
+        void SetStatus(BattleGroundStatus status);
         void SetClientInstanceId(uint32 instanceId) { m_clientInstanceId = instanceId; }
         void SetStartTime(uint32 time)      { m_startTime = time; }
         void SetEndTime(uint32 time)        { m_endTime = time; }
@@ -401,12 +381,11 @@ class BattleGround
         void SetMaxPlayersPerTeam(uint32 maxPlayers) { m_maxPlayersPerTeam = maxPlayers; }
         void SetMinPlayersPerTeam(uint32 minPlayers) { m_minPlayersPerTeam = minPlayers; }
 
-        void AddToBgFreeSlotQueue();                        // this queue will be useful when more battlegrounds instances will be available
-        void RemoveFromBgFreeSlotQueue();                   // this method could delete whole BG instance, if another free is available
+        bool AddToBgFreeSlotQueue();                           // this queue will be useful when more battlegrounds instances will be available
+        void RemovedFromBgFreeSlotQueue(bool removeFromQueue); // this method could delete whole BG instance, if another free is available
 
         // Functions to decrease or increase player count
-        void DecreaseInvitedCount(Team team)      { (team == ALLIANCE) ? --m_invitedAlliance : --m_invitedHorde; }
-        void IncreaseInvitedCount(Team team)      { (team == ALLIANCE) ? ++m_invitedAlliance : ++m_invitedHorde; }
+        void SetInvitedCount(Team team, uint32 count);
         uint32 GetInvitedCount(Team team) const
         {
             if (team == ALLIANCE)
@@ -439,6 +418,10 @@ class BattleGround
         typedef std::map<uint32, ObjectGuid> EntryGuidMap;
         GameObject* GetSingleGameObjectFromStorage(uint32 entry) const;
         Creature* GetSingleCreatureFromStorage(uint32 entry, bool skipDebugLog = false) const;
+
+#ifdef ENABLE_PLAYERBOTS
+        uint32 GetSingleGameObjectGuid(uint8 event1, uint8 event2);
+#endif
 
         // Function that set and get battleground map id
         void SetMapId(uint32 mapId) { m_mapId = mapId; }
@@ -642,7 +625,7 @@ class BattleGround
         // returns the other team index
         static PvpTeamIndex GetOtherTeamIndex(PvpTeamIndex teamIdx) { return teamIdx == TEAM_INDEX_ALLIANCE ? TEAM_INDEX_HORDE : TEAM_INDEX_ALLIANCE; }
 
-        // checke if player is inside battleground
+        // check if player is inside battleground
         bool IsPlayerInBattleGround(ObjectGuid /*playerGuid*/);
 
         // Handle script condition fulfillment
@@ -650,9 +633,6 @@ class BattleGround
 
         // Handle achievement criteria requirements
         virtual bool CheckAchievementCriteriaMeet(uint32 /*criteria_id*/, Player const* /*source*/, Unit const* /*target*/, uint32 /*miscvalue1*/) { return false; }
-
-        // function that start timed achievement
-        void StartTimedAchievement(AchievementCriteriaTypes /*type*/, uint32 /*entry*/);
 
         struct EventObjects
         {
@@ -673,9 +653,14 @@ class BattleGround
         void SetPlayerSkinRefLootId(uint32 reflootId) { m_playerSkinReflootId = reflootId; }
 
         virtual void AlterTeleportLocation(Player* player, ObjectGuid& transportGuid, float& x, float& y, float& z, float& ori) {}
-    protected:
+
+        MaNGOS::unique_weak_ptr<BattleGround> GetWeakPtr() const { return m_weakRef; }
+        void SetWeakPtr(MaNGOS::unique_weak_ptr<BattleGround> weakRef) { m_weakRef = std::move(weakRef); }
+
         // this method is called, when BG cannot spawn its own spirit guide, or something is wrong, It correctly ends BattleGround
         void EndNow();
+
+    protected:
         void PlayerAddedToBgCheckIfBgIsRunning(Player* /*player*/);
 
         /* Scorekeeping */
@@ -765,6 +750,8 @@ class BattleGround
         float m_startMaxDist;
 
         uint32 m_playerSkinReflootId;
+
+        MaNGOS::unique_weak_ptr<BattleGround> m_weakRef;
 };
 
 // helper functions for world state list fill

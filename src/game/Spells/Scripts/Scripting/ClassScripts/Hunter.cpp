@@ -262,6 +262,40 @@ struct ArcaneShotHunter : public SpellScript
     }
 };
 
+// 34701 - Random Aggro
+struct RandomAggroSnakeTrap : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0)
+            return;
+
+        Unit* target = spell->GetUnitTarget();
+        Unit* caster = spell->GetCaster();
+        if (caster->CanAttack(target))
+        {
+            if (caster->IsVisibleForOrDetect(target, target, true))
+                caster->AI()->AttackStart(caster);
+        }
+    }
+};
+
+// 19572, 19573 - Improved Mend Pet
+struct ImprovedMendPet : public AuraScript
+{
+    SpellAuraProcResult OnProc(Aura* aura, ProcExecutionData& procData) const override
+    {
+        if (!roll_chance_i(aura->GetModifier()->m_amount))
+            return SPELL_AURA_PROC_FAILED;
+
+        procData.triggeredSpellId = 24406;
+        procData.triggerTarget = procData.target;
+        return SPELL_AURA_PROC_OK;
+    }
+};
+
+// TODO: some evidence tbc pet growl scales with hunter AP
+
 void LoadHunterScripts()
 {
     RegisterSpellScript<Entrapment>("spell_entrapment");
@@ -280,4 +314,6 @@ void LoadHunterScripts()
     RegisterSpellScript<GlyphOfSteadyShot>("spell_glyph_of_steady_shot");
     RegisterSpellScript<GlyphOfTrueshotAura>("spell_glyph_of_trueshot_aura");
     RegisterSpellScript<ArcaneShotHunter>("spell_arcane_shot_hunter");
+    RegisterSpellScript<RandomAggroSnakeTrap>("spell_random_aggro_snake_trap");
+    RegisterSpellScript<ImprovedMendPet>("spell_improved_mend_pet");
 }

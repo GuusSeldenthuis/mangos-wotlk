@@ -134,6 +134,7 @@ set(SRC_GRP_UTIL
     Util/Util.h
     Util/ProducerConsumerQueue.h
     Util/CommonDefines.h
+    Util/UniqueTrackablePtr.h
 )
 
 set(LIBRARY_SRCS
@@ -221,6 +222,8 @@ target_include_directories(${LIBRARY_NAME}
   PUBLIC ${CMAKE_BINARY_DIR}/src/shared # For the generated revision.h.
   PUBLIC "${CMAKE_SOURCE_DIR}/src/game"
 )
+
+target_link_libraries(${LIBRARY_NAME} PUBLIC cmangos-compile-option-interface)
 
 if(UNIX)
   target_link_libraries(${LIBRARY_NAME}

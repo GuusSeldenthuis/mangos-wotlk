@@ -298,9 +298,9 @@ bool ChatHandler::HandleDebugPlaySoundCommand(char* args)
     }
 
     if (m_session->GetPlayer()->GetSelectionGuid())
-        unit->PlayDistanceSound(dwSoundId, PlayPacketParameters(PLAY_TARGET, m_session->GetPlayer()));
+        unit->PlayDistanceSound(dwSoundId, PlayPacketParameters(PlayPacketSettings::TARGET, m_session->GetPlayer()));
     else
-        unit->PlayDirectSound(dwSoundId, PlayPacketParameters(PLAY_TARGET, m_session->GetPlayer()));
+        unit->PlayDirectSound(dwSoundId, PlayPacketParameters(PlayPacketSettings::TARGET, m_session->GetPlayer()));
 
     PSendSysMessage(LANG_YOU_HEAR_SOUND, dwSoundId);
     return true;
@@ -322,7 +322,7 @@ bool ChatHandler::HandleDebugPlayMusicCommand(char* args)
         return false;
     }
 
-    m_session->GetPlayer()->PlayMusic(dwMusicId, PlayPacketParameters(PLAY_TARGET, dynamic_cast<Player*>(getSelectedUnit())));
+    m_session->GetPlayer()->PlayMusic(dwMusicId, PlayPacketParameters(PlayPacketSettings::TARGET, dynamic_cast<Player*>(getSelectedUnit())));
 
     PSendSysMessage(LANG_YOU_HEAR_SOUND, dwMusicId);
     return true;
@@ -741,13 +741,19 @@ bool ChatHandler::HandleDebugGetItemStateCommand(char* args)
 
 bool ChatHandler::HandleDebugBattlegroundCommand(char* /*args*/)
 {
-    sBattleGroundMgr.ToggleTesting();
+    sBattleGroundMgr.GetMessager().AddMessage([](BattleGroundMgr* mgr)
+    {
+        mgr->ToggleTesting();
+    });
     return true;
 }
 
 bool ChatHandler::HandleDebugArenaCommand(char* /*args*/)
 {
-    sBattleGroundMgr.ToggleArenaTesting();
+    sBattleGroundMgr.GetMessager().AddMessage([](BattleGroundMgr* mgr)
+    {
+        mgr->ToggleArenaTesting();
+    });
     return true;
 }
 

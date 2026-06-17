@@ -22,6 +22,7 @@
 #include "Common.h"
 #include "Entities/Unit.h"
 #include "Globals/SharedDefines.h"
+#include "Entities/CreatureDefines.h"
 #include "Server/DBCEnums.h"
 #include "Util/Util.h"
 #include "Entities/CreatureSpellList.h"
@@ -50,7 +51,7 @@ enum CreatureFlagsExtra
     CREATURE_EXTRA_FLAG_NO_PARRY               = 0x00000004,       // 4 creature can't parry
     CREATURE_EXTRA_FLAG_NO_PARRY_HASTEN        = 0x00000008,       // 8 creature can't counter-attack at parry
     CREATURE_EXTRA_FLAG_NO_BLOCK               = 0x00000010,       // 16 creature can't block
-    CREATURE_EXTRA_FLAG_UNUSED                 = 0x00000020,       // 32
+    CREATURE_EXTRA_FLAG_RUN_DURING_WANDER      = 0x00000020,       // 32 15% chance during wander (random movement)
     CREATURE_EXTRA_FLAG_UNUSED2                = 0x00000040,       // 64
     CREATURE_EXTRA_FLAG_INVISIBLE              = 0x00000080,       // 128 creature is always invisible for player (mostly trigger creatures)
     CREATURE_EXTRA_FLAG_UNUSED3                = 0x00000100,       // 256
@@ -107,7 +108,7 @@ struct CreatureInfo
     uint32  UnitFlags2;                                     // enum UnitFlags2
     uint32  DynamicFlags;
     uint32  ExtraFlags;
-    uint32  CreatureTypeFlags;                              // enum CreatureTypeFlags mask values
+    uint32  TypeFlags;                                      // enum TypeFlags mask values
     uint32  StaticFlags;
     uint32  StaticFlags2;
     uint32  StaticFlags3;
@@ -194,11 +195,11 @@ struct CreatureInfo
 
     SkillType GetRequiredLootSkill() const
     {
-        if (CreatureTypeFlags & CREATURE_TYPEFLAGS_HERBLOOT)
+        if (HasFlag(CreatureTypeFlags::SKIN_WITH_HERBALISM))
             return SKILL_HERBALISM;
-        if (CreatureTypeFlags & CREATURE_TYPEFLAGS_MININGLOOT)
+        if (HasFlag(CreatureTypeFlags::SKIN_WITH_MINING))
             return SKILL_MINING;
-        if (CreatureTypeFlags & CREATURE_TYPEFLAGS_ENGINEERLOOT)
+        if (HasFlag(CreatureTypeFlags::SKIN_WITH_ENGINEERING))
             return SKILL_ENGINEERING;
         return SKILL_SKINNING;
         // normal case
@@ -206,16 +207,51 @@ struct CreatureInfo
 
     bool IsExotic() const
     {
-        return (CreatureTypeFlags & CREATURE_TYPEFLAGS_EXOTIC) != 0;
+        return bool(CreatureTypeFlags(TypeFlags) & CreatureTypeFlags::TAMEABLE_EXOTIC) != 0;
     }
 
     bool isTameable(bool exotic) const
     {
-        if (CreatureType != CREATURE_TYPE_BEAST || Family == 0 || (CreatureTypeFlags & CREATURE_TYPEFLAGS_TAMEABLE) == 0)
+        if (CreatureType != CREATURE_TYPE_BEAST || Family == 0 || !HasFlag(CreatureTypeFlags::TAMEABLE))
             return false;
 
         // if can tame exotic then can tame any tameable
         return exotic || !IsExotic();
+    }
+
+    bool HasFlag(CreatureTypeFlags flags) const
+    {
+        return bool(CreatureTypeFlags(TypeFlags) & flags);
+    }
+
+    bool HasFlag(CreatureStaticFlags flags) const
+    {
+        return bool(CreatureStaticFlags(StaticFlags) & flags);
+    }
+
+    bool HasFlag(CreatureStaticFlags2 flags) const
+    {
+        return bool(CreatureStaticFlags2(StaticFlags2) & flags);
+    }
+
+    bool HasFlag(CreatureStaticFlags3 flags) const
+    {
+        return bool(CreatureStaticFlags3(StaticFlags3) & flags);
+    }
+
+    bool HasFlag(CreatureStaticFlags4 flags) const
+    {
+        return bool(CreatureStaticFlags4(StaticFlags4) & flags);
+    }
+
+    bool IsLargeOrBiggerCreature() const
+    {
+        return HasFlag(CreatureStaticFlags::LARGE_AOI) || HasFlag(CreatureStaticFlags3::GIGANTIC_AOI) || HasFlag(CreatureStaticFlags3::INFINITE_AOI);
+    }
+
+    bool HasFlag(CreatureFlagsExtra flags) const
+    {
+        return bool(ExtraFlags & flags);
     }
 };
 
@@ -235,8 +271,9 @@ struct EquipmentInfo
 
 enum SpawnFlags
 {
-    SPAWN_FLAG_RUN_ON_SPAWN = 0x01,
-    SPAWN_FLAG_HOVER        = 0x02,
+    SPAWN_FLAG_RUN_ON_SPAWN     = 0x01,
+    SPAWN_FLAG_HOVER            = 0x02,
+    SPAWN_FLAG_DISABLE_GRAVITY  = 0x04,
 };
 
 struct CreatureSpawnTemplate
@@ -255,6 +292,7 @@ struct CreatureSpawnTemplate
 
     bool IsRunning() const { return (spawnFlags & SPAWN_FLAG_RUN_ON_SPAWN) != 0; }
     bool IsHovering() const { return (spawnFlags & SPAWN_FLAG_HOVER) != 0; }
+    bool IsGravityDisabled() const { return (spawnFlags & SPAWN_FLAG_DISABLE_GRAVITY) != 0; }
 };
 
 // from `creature` table
@@ -468,13 +506,13 @@ struct TrainerSpell
     uint32 reqSkill;
     uint32 reqSkillValue;
     uint32 reqLevel;
-    uint32 learnedSpell;
+    std::vector<uint32> learnedSpell;
     std::array<std::optional<uint32>, 3> reqAbility;
     uint32 conditionId;
     bool isProvidedReqLevel;
 
     // helpers
-    bool IsCastable() const { return learnedSpell != spell; }
+    bool IsCastable() const { return learnedSpell.size() > 1; }
 };
 
 typedef std::unordered_map < uint32 /*spellid*/, TrainerSpell > TrainerSpellMap;
@@ -558,7 +596,7 @@ class Creature : public Unit
     public:
 
         explicit Creature(CreatureSubtype subtype = CREATURE_SUBTYPE_GENERIC);
-        virtual ~Creature();
+        virtual ~Creature() override;
 
         void AddToWorld() override;
         void RemoveFromWorld() override;
@@ -606,7 +644,7 @@ class Creature : public Unit
         bool CanWalk() const override { return (GetCreatureInfo()->InhabitType & INHABIT_GROUND) != 0; }
         bool CanSwim() const override { return (GetCreatureInfo()->InhabitType & INHABIT_WATER) != 0; }
         bool IsSwimming() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING); }
-        bool CanFly() const override { return (GetCreatureInfo()->InhabitType & INHABIT_AIR) || (GetByteValue(UNIT_FIELD_BYTES_1, 3) & UNIT_BYTE1_FLAG_FLY_ANIM) || m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_LEVITATING | MOVEFLAG_HOVER | MOVEFLAG_CAN_FLY)); }
+        bool CanFly() const override { return (GetCreatureInfo()->InhabitType & INHABIT_AIR) || (GetAnimTier() == AnimTier::Fly) || m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_LEVITATING | MOVEFLAG_HOVER | MOVEFLAG_CAN_FLY)); }
         bool IsFlying() const override { return m_movementInfo.HasMovementFlag((MovementFlags)(MOVEFLAG_FLYING | MOVEFLAG_HOVER | MOVEFLAG_LEVITATING)); }
         bool IsTrainerOf(Player* pPlayer, bool msg) const;
         bool CanInteractWithBattleMaster(Player* pPlayer, bool msg) const;
@@ -679,6 +717,7 @@ class Creature : public Unit
         bool UpdateAllStats() override;
         void UpdateResistances(uint32 school) override;
         void UpdateArmor() override;
+        void UpdateMaxHealth() override;
         void UpdateAttackPowerAndDamage(bool ranged = false) override;
         void UpdateDamagePhysical(WeaponAttackType attType) override;
         virtual float GetConditionalTotalPhysicalDamageModifier(WeaponAttackType type) const;
@@ -719,7 +758,7 @@ class Creature : public Unit
         virtual void DeleteFromDB();                        // overwrited in Pet
         static void DeleteFromDB(uint32 lowguid, CreatureData const* data);
 
-        void PrepareBodyLootState();
+        void PrepareBodyLootState(Unit* killer);
         CreatureLootStatus GetLootStatus() const { return m_lootStatus; }
         virtual void InspectingLoot() override;
         void SetLootStatus(CreatureLootStatus status, bool forced = false);
@@ -740,9 +779,10 @@ class Creature : public Unit
 
         void CallForHelp(float radius);
         void CallAssistance();
+        void CallAssistance(Unit* enemy);
         void SetNoCallAssistance(bool val) { m_AlreadyCallAssistance = val; }
         bool CanAssistTo(const Unit* u, const Unit* enemy, bool checkfaction = true) const;
-        bool CanInitiateAttack() const;
+        bool CanInitiateAttack() const override;
         bool CanCallForAssistance() const override { return m_canCallForAssistance; }
         void SetCanCallForAssistance(bool state) { m_canCallForAssistance = state; }
         bool IsInGroup(Unit const* other, bool party/* = false*/, bool ignoreCharms/* = false*/) const override;
@@ -755,6 +795,7 @@ class Creature : public Unit
         void RemoveCorpse(bool inPlace = false);
 
         virtual void ForcedDespawn(uint32 timeMSToDespawn = 0, bool onlyAlive = false);
+        virtual void ForcedDespawn(std::chrono::milliseconds timeToDespawn, bool onlyAlive = false) { ForcedDespawn(timeToDespawn.count(), onlyAlive); }
 
         time_t const& GetRespawnTime() const { return m_respawnTime; }
         time_t GetRespawnTimeEx() const;
@@ -762,8 +803,9 @@ class Creature : public Unit
         void Respawn();
         void SaveRespawnTime() override;
 
-        uint32 GetRespawnDelay() const { return m_respawnDelay; }
+        uint32 GetRespawnDelay() const override { return m_respawnDelay; }
         void SetRespawnDelay(uint32 delay, bool once = false) { m_respawnDelay = delay; m_respawnOverriden = true; m_respawnOverrideOnce = once; } // in seconds
+        void SetRespawnDelay(std::chrono::seconds delay, bool once = false) { SetRespawnDelay(delay.count(), once); }
 
         float GetRespawnRadius() const { return m_respawnradius; }
         void SetRespawnRadius(float dist) { m_respawnradius = dist; }
@@ -780,7 +822,7 @@ class Creature : public Unit
         uint32 GetInteractionPauseTimer() const { return m_interactionPauseTimer; }
 
         GridReference<Creature>& GetGridRef() { return m_gridRef; }
-        bool IsRegeneratingHealth() const { return (GetCreatureInfo()->RegenerateStats & REGEN_FLAG_HEALTH) != 0 && !(GetCreatureInfo()->CreatureTypeFlags & CREATURE_TYPEFLAGS_SIEGE_WEAPON); }
+        bool IsRegeneratingHealth() const { return (GetCreatureInfo()->RegenerateStats & REGEN_FLAG_HEALTH) != 0 && !(GetCreatureInfo()->HasFlag(CreatureTypeFlags::ALLOW_INTERACTION_WHILE_IN_COMBAT)); }
         bool IsRegeneratingPower() const;
         virtual uint8 GetPetAutoSpellSize() const { return CREATURE_MAX_SPELLS; }
         virtual uint32 GetPetAutoSpellOnPos(uint8 pos) const
@@ -807,17 +849,19 @@ class Creature : public Unit
 
         void SendAreaSpiritHealerQueryOpcode(Player* pl) const;
 
-        void SetVirtualItem(VirtualItemSlot slot, uint32 item_id) { SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + slot, item_id); }
+        void SetVirtualItem(VirtualItemSlot slot, uint32 item_id) { SetUInt32Value(static_cast<uint16>(UNIT_VIRTUAL_ITEM_SLOT_ID) + static_cast<uint16>(slot), item_id); }
 
         bool hasWeapon(WeaponAttackType type) const override;
         bool hasWeaponForAttack(WeaponAttackType type) const override { return (Unit::hasWeaponForAttack(type) && hasWeapon(type)); }
         virtual void SetCanDualWield(bool value) override;
 
+        virtual bool CanDaze() const override;
+
         void SetInvisible(bool invisible) { m_isInvisible = invisible; }
         bool IsInvisible() const { return m_isInvisible; }
 
         void SetIgnoreMMAP(bool ignore) { m_ignoreMMAP = ignore; }
-        bool IsIgnoringMMAP() const { return m_ignoreMMAP; }
+        virtual MmapForcingStatus IsIgnoringMMAP() const override;
 
         void OnEventHappened(uint16 eventId, bool activate, bool resume) override { return AI()->OnEventHappened(eventId, activate, resume); }
 
@@ -849,6 +893,8 @@ class Creature : public Unit
         void SetNoReputation(bool state) { m_noReputation = state; }
         bool IsIgnoringFeignDeath() const override;
         void SetIgnoreFeignDeath(bool state);
+        bool IsIgnoringSanctuary() const override;
+        void SetIgnoreSanctuary(bool state);
 
         void SetNoWoundedSlowdown(bool state);
         bool IsNoWoundedSlowdown() const;
@@ -857,7 +903,12 @@ class Creature : public Unit
         void SetNoWeaponSkillGain(bool state);
         bool IsNoWeaponSkillGain() const override;
 
+        bool IsIgnoringMisdirect() const override;
+        void SetIgnoreMisdirect(bool state);
+
         bool IsPreventingDeath() const override;
+
+        bool IsIgnoringMisdirection() const override;
 
         virtual void AddCooldown(SpellEntry const& spellEntry, ItemPrototype const* itemProto = nullptr, bool permanent = false, uint32 forcedDuration = 0, bool ignoreCat = false) override;
 
@@ -866,6 +917,8 @@ class Creature : public Unit
         void RegisterHitBySpell(uint32 spellId);
         void UnregisterHitBySpell(uint32 spellId);
         void ResetSpellHitCounter();
+
+        uint32 GetNextUpdateTime() override;
 
         HighGuid GetParentHigh() const override { return HIGHGUID_UNIT; }
 
@@ -898,6 +951,30 @@ class Creature : public Unit
         void SetKillerGuid(ObjectGuid guid) { m_killer = guid; }
 
         virtual uint32 GetDuration() const { return 0; }
+
+        virtual bool CannotTurn() const override { return m_settings.HasFlag(CreatureStaticFlags3::CANNOT_TURN); }
+
+        CreatureInfo const* GetMountInfo() const override{ return m_mountInfo; }
+        void SetMountInfo(CreatureInfo const* info) override;
+
+        void SetModelRunSpeed(float runSpeed) override { m_modelRunSpeed = runSpeed; }
+
+        bool IsCombatOnlyStealth() const { return m_combatOnlyStealth; }
+        void SetCombatOnlyStealth(bool state) { m_combatOnlyStealth = state; }
+
+        void SetDelayedPetSpells() { m_delayedPetSpells = true; }
+        void TriggerDelayedPetSpells();
+
+        void SetDelayedBoarding(uint32 spellId, int32 seat) { m_delayedBoardingSpell = spellId; m_delayedBoardingSeat = seat; }
+        void TriggerDelayedBoarding();
+
+        bool IsThreatUpdateSent() const override;
+        bool IgnoreLosWhenCastingOnMe() const override;
+        bool IsDealTripleDamageToPets() const override;
+        bool IsEnemyCheckIgnoresLos() const override;
+        bool IsSubjectToTauntDr() const override;
+        bool IsTreatAsPlayerForDebuffDuration() const override;
+        bool IsTreatAsPlayerForDiminishingReturns() const override;
 
     protected:
         bool CreateFromProto(uint32 dbGuid, uint32 guidlow, CreatureInfo const* cinfo, const CreatureData* data = nullptr, GameEventCreatureData const* eventData = nullptr);
@@ -977,9 +1054,20 @@ class Creature : public Unit
 
         bool m_imposedCooldown;
 
+        bool m_delayedPetSpells;
+        uint32 m_delayedBoardingSpell;
+        int32 m_delayedBoardingSeat;
+
+        float m_healthMultiplier;
+
     private:
         GridReference<Creature> m_gridRef;
         CreatureInfo const* m_creatureInfo;                 // in difficulty mode > 0 can different from ObjMgr::GetCreatureTemplate(GetEntry())
+
+        CreatureInfo const* m_mountInfo;
+        float m_modelRunSpeed;
+
+        bool m_combatOnlyStealth;
 };
 
 class ForcedDespawnDelayEvent : public BasicEvent

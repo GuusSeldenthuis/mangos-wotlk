@@ -66,9 +66,9 @@ std::string ObjectGuid::GetString() const
 template<HighGuid high>
 uint32 ObjectGuidGenerator<high>::Generate()
 {
-    if (m_nextGuid >= ObjectGuid::GetMaxCounter(high) - 1)
+    if (m_nextGuid >= ObjectGuid::GetMaxCounter(high) - 1000)
     {
-        sLog.outError("%s guid overflow!! Can't continue, shutting down server. ", ObjectGuid::GetTypeName(high));
+        sLog.outError("%s guid overflow very close!! Can't continue, shutting down server. ", ObjectGuid::GetTypeName(high));
         World::StopNow(ERROR_EXIT_CODE);
     }
     return m_nextGuid++;
@@ -101,7 +101,6 @@ ByteBuffer& operator>>(ByteBuffer& buf, PackedGuidReader const& guid)
 template uint32 ObjectGuidGenerator<HIGHGUID_ITEM>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_PLAYER>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_GAMEOBJECT>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_TRANSPORT>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_UNIT>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_PET>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_VEHICLE>::Generate();
@@ -109,3 +108,4 @@ template uint32 ObjectGuidGenerator<HIGHGUID_DYNAMICOBJECT>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_CORPSE>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_INSTANCE>::Generate();
 template uint32 ObjectGuidGenerator<HIGHGUID_GROUP>::Generate();
+template uint32 ObjectGuidGenerator<HIGHGUID_MO_TRANSPORT>::Generate();

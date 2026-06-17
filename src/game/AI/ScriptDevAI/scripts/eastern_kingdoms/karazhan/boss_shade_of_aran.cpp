@@ -124,7 +124,7 @@ enum AranActions // order based on priority
 
 struct boss_aranAI : public CombatAI
 {
-    boss_aranAI(Creature* creature) : CombatAI(creature, ARAN_ACTION_MAX), m_instance(static_cast<instance_karazhan*>(creature->GetInstanceData())), m_atiesh(false)
+    boss_aranAI(Creature* creature) : CombatAI(creature, ARAN_ACTION_MAX), m_instance(dynamic_cast<instance_karazhan*>(creature->GetInstanceData())), m_atiesh(false)
     {
         AddTimerlessCombatAction(ARAN_ACTION_DRINK, true);
         AddTimerlessCombatAction(ARAN_ACTION_POTION, true);
@@ -163,16 +163,19 @@ struct boss_aranAI : public CombatAI
 
         SetCombatMovement(true);
 
-        for (ObjectGuid guid : m_instance->GetAranTeleportNPCs())
-            if (Creature* teleport = m_creature->GetMap()->GetCreature(guid))
-            {
-                if (teleport->GetCreatureInfo()->Entry == NPC_SHADOW_OF_ARAN) // avoid case on spawn
+        if (m_instance)
+        {
+            for (ObjectGuid guid : m_instance->GetAranTeleportNPCs())
+                if (Creature* teleport = m_creature->GetMap()->GetCreature(guid))
                 {
-                    teleport->ResetEntry();
-                    teleport->AI()->EnterEvadeMode();
-                    teleport->AIM_Initialize();
+                    if (teleport->GetCreatureInfo()->Entry == NPC_SHADOW_OF_ARAN) // avoid case on spawn
+                    {
+                        teleport->ResetEntry();
+                        teleport->AI()->EnterEvadeMode();
+                        teleport->AIM_Initialize();
+                    }
                 }
-            }
+        }
     }
 
     uint32 GetNormalSpellId(uint32 index) const
@@ -466,6 +469,7 @@ struct boss_aranAI : public CombatAI
     }
 };
 
+// 29969 - Summon Blizzard
 struct SummonBlizzard : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
@@ -475,6 +479,7 @@ struct SummonBlizzard : public SpellScript
     }
 };
 
+// 29970 - Dispel Blizzard
 struct DispelBlizzard : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
@@ -484,6 +489,7 @@ struct DispelBlizzard : public SpellScript
     }
 };
 
+// 29979 - Massive Magnetic Pull
 struct MassiveMagneticPull : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
@@ -493,6 +499,7 @@ struct MassiveMagneticPull : public SpellScript
     }
 };
 
+// 30004 - Flame Wreath
 struct FlameWreath : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
@@ -500,6 +507,15 @@ struct FlameWreath : public SpellScript
         if (Unit* target = spell->GetUnitTarget())
             if (target->IsPlayer())
                 spell->GetCaster()->CastSpell(target, 29946, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 29949 - Explosion
+struct FlameWreathExplosion : public SpellScript
+{
+    void OnSuccessfulFinish(Spell* spell) const override
+    {
+        spell->GetCaster()->RemoveAurasDueToSpellByCancel(29947);
     }
 };
 
@@ -514,6 +530,7 @@ void AddSC_boss_shade_of_aran()
     RegisterSpellScript<DispelBlizzard>("spell_dispel_blizzard");
     RegisterSpellScript<MassiveMagneticPull>("spell_massive_magnetic_pull");
     RegisterSpellScript<FlameWreath>("spell_flame_wreath");
+    RegisterSpellScript<FlameWreathExplosion>("spell_flame_wreath_explosion");
 
     sObjectMgr.AddCreatureCooldown(NPC_SHADOW_OF_ARAN, SPELL_FROSTBOLT, boss_aranAI::GetNormalSpellCooldown(SPELL_FROSTBOLT), boss_aranAI::GetNormalSpellCooldown(SPELL_FROSTBOLT));
     sObjectMgr.AddCreatureCooldown(NPC_SHADOW_OF_ARAN, SPELL_FIREBALL, boss_aranAI::GetNormalSpellCooldown(SPELL_FIREBALL), boss_aranAI::GetNormalSpellCooldown(SPELL_FIREBALL));

@@ -36,11 +36,12 @@ namespace MaNGOS
     struct VisibleNotifier
     {
         Camera& i_camera;
-        UpdateData i_data;
+        UpdateData& i_data;
         GuidSet i_clientGUIDs;
         WorldObjectSet i_visibleNow;
+        bool i_processSend;
 
-        explicit VisibleNotifier(Camera& c) : i_camera(c), i_clientGUIDs(c.GetOwner()->GetClientGuids()) {}
+        explicit VisibleNotifier(Camera& c, UpdateData& data, bool processSend) : i_camera(c), i_clientGUIDs(c.GetOwner()->GetClientGuids()), i_data(data), i_processSend(processSend) {}
         template<class T> void Visit(GridRefManager<T>& m);
         void Visit(CameraMapType& /*m*/) {}
         void Notify(void);
@@ -119,10 +120,11 @@ namespace MaNGOS
     struct SpellMessageDestLocDeliverer
     {
         WorldObject const& i_object;
-        WorldPacket const& i_message;
+        WorldPacket const& i_spellMessage;
+        WorldPacket const& i_destLoc;
         bool i_accumulate;
         GuidSet i_guids;
-        SpellMessageDestLocDeliverer(WorldObject const& obj, WorldPacket const& msg) : i_object(obj), i_message(msg), i_accumulate(true) {}
+        SpellMessageDestLocDeliverer(WorldObject const& obj, WorldPacket const& spell, WorldPacket const& destLoc) : i_object(obj), i_spellMessage(spell), i_destLoc(destLoc), i_accumulate(true) {}
         void Visit(CameraMapType& m);
         template<class SKIP> void Visit(GridRefManager<SKIP>&) {}
         void StopAccumulating() { i_accumulate = false; }

@@ -51,7 +51,7 @@ void instance_dire_maul::Update(uint32 /*uiDiff*/)
             GameObject* bell = instance->GetGameObject(m_goEntryGuidStore[GO_BELL_OF_DETHMOORA]);
             GameObject* wheel = instance->GetGameObject(m_goEntryGuidStore[GO_WHEEL_OF_BLACK_MARCH]);
             GameObject* candle = instance->GetGameObject(m_goEntryGuidStore[GO_DOOMSDAY_CANDLE]);
-            if (bell && bell->GetGoState() != GO_STATE_ACTIVE && wheel && wheel->GetGoState() != GO_STATE_ACTIVE && candle && candle->GetGoState() != GO_STATE_ACTIVE)
+            if (bell && bell->GetLootState() != GO_ACTIVATED && wheel && wheel->GetLootState() != GO_ACTIVATED && candle && candle->GetLootState() != GO_ACTIVATED)
                 SetData(TYPE_DREADSTEED, FAIL);
         }
     }
@@ -611,9 +611,10 @@ void instance_dire_maul::ProcessDreadsteedRitualStart()
         go->SetRespawnTime(900);
         go->Refresh();
     }
+
     for (auto portal : m_lDreadsteedPortalsGUIDs)
         if (GameObject* go = instance->GetGameObject(portal))
-            DoRespawnGameObject(portal, 360);
+            DoRespawnGameObject(portal, 380);
 }
 
 InstanceData* GetInstanceData_instance_dire_maul(Map* pMap)
@@ -659,20 +660,18 @@ GameObjectAI* GetAI_go_fixed_trap(GameObject* go)
 ## Guard Slip'kik Trigger dummy effect
 ####################################*/
 
-bool EffectDummyCreature_spell_guard_slip_kik(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex /* uiEffIndex */, Creature* /* pCreatureTarget */, ObjectGuid /*originalCasterGuid*/)
+// 31770 - Guard Slip'kik Trigger
+struct GuardSlipkikTrigger : public SpellScript
 {
-    if (uiSpellId == SPELL_GUARD_SLIPKIK_TRIGGER)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        instance_dire_maul* pInstance = (instance_dire_maul*)pCaster->GetInstanceData();
-        if (pInstance)
+        if (instance_dire_maul* instance = static_cast<instance_dire_maul*>(spell->GetCaster()->GetInstanceData()))
         {
-            if (Creature* slipkik = pInstance->GetSingleCreatureFromStorage(NPC_GUARD_SLIPKIK))
+            if (Creature* slipkik = instance->GetSingleCreatureFromStorage(NPC_GUARD_SLIPKIK))
                 slipkik->setFaction(FACTION_OGRE);
-            return true;
         }
     }
-    return false;
-}
+};
 
 void AddSC_instance_dire_maul()
 {
@@ -686,8 +685,5 @@ void AddSC_instance_dire_maul()
     pNewScript->GetGameObjectAI = &GetAI_go_fixed_trap;
     pNewScript->RegisterSelf();
 
-    pNewScript = new Script;
-    pNewScript->Name = "npc_mizzle_crafty";
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_guard_slip_kik;
-    pNewScript->RegisterSelf();
+    RegisterSpellScript<GuardSlipkikTrigger>("spell_guard_slipkik_trigger");
 }

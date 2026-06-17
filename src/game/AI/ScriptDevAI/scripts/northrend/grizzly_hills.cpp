@@ -75,35 +75,34 @@ UnitAI* GetAI_npc_depleted_war_golem(Creature* pCreature)
     return new npc_depleted_war_golemAI(pCreature);
 }
 
-bool EffectAuraDummy_npc_depleted_war_golem(const Aura* pAura, bool bApply)
+// 47799 - Charge War Golem
+struct ChargeWarGolem : public AuraScript
 {
-    if (pAura->GetId() != SPELL_CHARGE_GOLEM)
-        return true;
-
-    Creature* pCreature = (Creature*)pAura->GetTarget();
-
-    if (!pCreature)
-        return true;
-
-    if (pAura->GetEffIndex() == EFFECT_INDEX_0)
+    void OnApply(Aura* aura, bool apply) const override
     {
-        if (bApply)
-        {
-            DoScriptText(SAY_GOLEM_CHARGE, pCreature);
-            pCreature->addUnitState(UNIT_STAT_STUNNED);
-        }
-        else
-        {
-            DoScriptText(SAY_GOLEM_COMPLETE, pCreature);
-            pCreature->clearUnitState(UNIT_STAT_STUNNED);
+        if (!aura->GetTarget()->IsCreature())
+            return;
 
-            // targets master
-            pCreature->CastSpell(pCreature, SPELL_GOLEM_CHARGE_CREDIT, TRIGGERED_OLD_TRIGGERED);
+        Creature* golem = static_cast<Creature*>(aura->GetTarget());
+
+        if (aura->GetEffIndex() == EFFECT_INDEX_0)
+        {
+            if (apply)
+            {
+                DoScriptText(SAY_GOLEM_CHARGE, golem);
+                golem->addUnitState(UNIT_STAT_STUNNED);
+            }
+            else
+            {
+                DoScriptText(SAY_GOLEM_COMPLETE, golem);
+                golem->clearUnitState(UNIT_STAT_STUNNED);
+
+                // targets master
+                golem->CastSpell(nullptr, SPELL_GOLEM_CHARGE_CREDIT, TRIGGERED_OLD_TRIGGERED);
+            }
         }
     }
-
-    return true;
-}
+};
 
 /*######
 ## npc_harrison_jones
@@ -715,12 +714,74 @@ struct MoltenFuryFlamebringer : public SpellScript
     }
 };
 
+// 61544 - Summon Budd PET
+struct SummonBuddPet : public SpellScript
+{
+    enum
+    {
+        SPELL_BUDDS_ATTENTION_SPAN          = 47014,    // Budd's Attention Span
+        SPELL_BUDD_PET_PERIODIC_TRIGGER     = 47019,    // Budd Pet Periodic Trigger (Budd Pet Periodic Trigger)
+        SPELL_ATTENTION_SPAN                = 47025,    // Attention Span
+    };
+
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        Unit* caster = spell->GetCaster();
+
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+        summon->AI()->SetReactState(REACT_PASSIVE);
+        summon->CastSpell(caster, SPELL_BUDDS_ATTENTION_SPAN, TRIGGERED_OLD_TRIGGERED);
+        summon->CastSpell(summon, SPELL_BUDD_PET_PERIODIC_TRIGGER, TRIGGERED_OLD_TRIGGERED);
+        summon->CastSpell(nullptr, SPELL_ATTENTION_SPAN, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 47025 - Attention Span
+struct AttentionSpan : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        Unit* caster = aura->GetCaster();
+        Creature* budd = (Creature*)caster;
+
+        if (!apply && aura->GetRemoveMode() == AURA_REMOVE_BY_EXPIRE)
+        {
+            budd->ForcedDespawn();
+        }
+    }
+};
+
+// 54432 - Sparksocket AA: Aggro Check
+struct SparksocketAAAggroCheck : public SpellScript
+{
+    enum
+    {
+        SPELL_SPARKSOCKETPRESP =   56320,  // Sparksocket AA: Positive Response
+    };
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        Unit* caster = spell->GetCaster();
+        Unit* target = spell->GetUnitTarget();
+
+        if (!target->IsPlayer())
+            return;
+
+        Player* player = static_cast<Player*>(target);
+
+        if (player->IsMounted())
+        {
+            player->CastSpell(caster, SPELL_SPARKSOCKETPRESP, TRIGGERED_OLD_TRIGGERED);
+        }
+    }
+};
+
 void AddSC_grizzly_hills()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "npc_depleted_war_golem";
     pNewScript->GetAI = &GetAI_npc_depleted_war_golem;
-    pNewScript->pEffectAuraDummy = &EffectAuraDummy_npc_depleted_war_golem;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -735,10 +796,14 @@ void AddSC_grizzly_hills()
     pNewScript->pQuestAcceptNPC = &QuestAccept_npc_emily;
     pNewScript->RegisterSelf();
 
+    RegisterSpellScript<ChargeWarGolem>("spell_charge_war_golem");
     RegisterSpellScript<spell_eagle_eyes>("spell_eagle_eyes");
     RegisterSpellScript<spell_escape_from_silverbrook_credit_master>("spell_escape_from_silverbrook_credit_master");
     RegisterSpellScript<spell_tag_troll>("spell_tag_troll");
     RegisterSpellScript<spell_out_cold>("spell_out_cold");
     RegisterSpellScript<spell_assemble_cage>("spell_assemble_cage");
     RegisterSpellScript<MoltenFuryFlamebringer>("spell_molten_fury_flamebringer");
+    RegisterSpellScript<SummonBuddPet>("spell_summon_budd_pet");
+    RegisterSpellScript<AttentionSpan>("spell_attention_span");
+    RegisterSpellScript<SparksocketAAAggroCheck>("spell_sparksocket_aa_aggrocheck");
 }

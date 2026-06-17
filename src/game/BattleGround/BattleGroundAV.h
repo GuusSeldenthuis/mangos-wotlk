@@ -113,8 +113,6 @@ enum AVAchievs
     BG_AV_ACHIEV_CRIT_ALL_COUNTS_H1     = 3388,             // achiev id 1164
     BG_AV_ACHIEV_CRIT_ALL_COUNTS_H2     = 3389,
 
-    BG_AV_ACHIEV_CRIT_SICKLY_GAZELLE    = 6800,             // achiev id 223
-
     BG_AV_ACHIEV_CRIT_STORMPIKE_PERF1   = 1242,             // achiev id 220
     BG_AV_ACHIEV_CRIT_STORMPIKE_PERF2   = 1825,
     BG_AV_ACHIEV_CRIT_STORMPIKE_PERF3   = 1803,
@@ -602,7 +600,6 @@ class BattleGroundAVScore : public BattleGroundScore
 {
     public:
         BattleGroundAVScore() : graveyardsAssaulted(0), graveyardsDefended(0), towersAssaulted(0), towersDefended(0), secondaryObjectives(0) {};
-        virtual ~BattleGroundAVScore() {};
 
         uint32 GetAttr1() const override { return graveyardsAssaulted; }
         uint32 GetAttr2() const override { return graveyardsDefended; }
@@ -672,7 +669,7 @@ class BattleGroundAV : public BattleGround
         void ChangeMineOwner(AVMineIds mineId, PvpTeamIndex newOwnerTeamIdx);
 
         // World state helpers
-        uint8 GetWorldStateType(uint8 state, PvpTeamIndex teamIdx) const { return teamIdx * BG_AV_MAX_STATES + state; }
+        uint8 GetWorldStateType(uint8 state, PvpTeamIndex teamIdx) const { return static_cast<uint8>(teamIdx) * static_cast<uint8>(BG_AV_MAX_STATES) + state; }
         void UpdateNodeWorldState(AVNodeIds node, uint32 newState);
 
         // Herald announcements

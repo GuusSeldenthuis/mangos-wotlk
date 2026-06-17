@@ -359,7 +359,7 @@ void instance_naxxramas::SetData(uint32 uiType, uint32 uiData)
             if (uiData == DONE)
             {
                 DoUseDoorOrButton(GO_ARAC_ANUB_GATE);
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_KILL_CREATURE, ACHIEV_START_MAEXXNA_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_MAEXXNA_ID, nullptr);
             }
             if (uiData == DONE || uiData == FAIL)
                 DespawnGuids(m_corpseScarabs);
@@ -483,7 +483,7 @@ void instance_naxxramas::SetData(uint32 uiType, uint32 uiData)
         case TYPE_PATCHWERK:
             m_auiEncounter[uiType] = uiData;
             if (uiData == IN_PROGRESS)
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_KILL_CREATURE, ACHIEV_START_PATCHWERK_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_PATCHWERK_ID, nullptr);
             else if (uiData == DONE)
                 DoUseDoorOrButton(GO_CONS_PATH_EXIT_DOOR);
             break;
@@ -739,7 +739,7 @@ void instance_naxxramas::Update(uint32 uiDiff)
 }
 
 // Right is right side from gothik (eastern)
-bool instance_naxxramas::IsInRightSideGothArea(Unit* unit)
+bool instance_naxxramas::IsInRightSideGothikArea(Unit* unit)
 {
     if (GameObject* combatGate = GetSingleGameObjectFromStorage(GO_MILI_GOTH_COMBAT_GATE))
         return (combatGate->GetPositionY() >= unit->GetPositionY());
@@ -793,11 +793,6 @@ void instance_naxxramas::DoTaunt()
             case 4: DoOrSimulateScriptTextForThisInstance(SAY_KELTHUZAD_TAUNT4, NPC_KELTHUZAD); break;
         }
     }
-}
-
-InstanceData* GetInstanceData_instance_naxxramas(Map* pMap)
-{
-    return new instance_naxxramas(pMap);
 }
 
 bool AreaTrigger_at_naxxramas(Player* player, AreaTriggerEntry const* areaTrigger)
@@ -861,7 +856,7 @@ void AddSC_instance_naxxramas()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "instance_naxxramas";
-    pNewScript->GetInstanceData = &GetInstanceData_instance_naxxramas;
+    pNewScript->GetInstanceData = &GetNewInstanceScript<instance_naxxramas>;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;

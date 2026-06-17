@@ -352,13 +352,14 @@ pAuraProcHandler AuraProcHandler[TOTAL_AURAS] =
 struct ProcTriggeredData
 {
     ProcTriggeredData(SpellProcEventEntry const* _spellProcEvent, SpellAuraHolder* _triggeredByHolder)
-        : spellProcEvent(_spellProcEvent), triggeredByHolder(_triggeredByHolder)
+        : spellProcEvent(_spellProcEvent), triggeredByHolder(_triggeredByHolder), canProc{true, true, true}
     {}
     SpellProcEventEntry const* spellProcEvent;
     SpellAuraHolder* triggeredByHolder;
+    bool canProc[MAX_EFFECT_INDEX];
 };
 
-typedef std::list< ProcTriggeredData > ProcTriggeredList;
+typedef std::vector<ProcTriggeredData> ProcTriggeredVector;
 
 uint32 createProcExtendMask(SpellNonMeleeDamage* damageInfo, SpellMissInfo missCondition)
 {
@@ -536,7 +537,7 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
 {
     ProcExecutionData execData(argData, isVictim);
 
-    ProcTriggeredList procTriggered;
+    ProcTriggeredVector procTriggered;
     std::vector<SpellAuraHolder*> holdersForDeletion;
     // Fill procTriggered list
     for (SpellAuraHolderMap::const_iterator itr = GetSpellAuraHolderMap().begin(); itr != GetSpellAuraHolderMap().end(); ++itr)
@@ -546,8 +547,9 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
         if (holder->GetState() != SPELLAURAHOLDER_STATE_READY || holder->IsDeleted())
             continue;
 
-        SpellProcEventEntry const* spellProcEvent = nullptr;
-        SpellProcEventTriggerCheck result = IsTriggeredAtSpellProcEvent(execData, holder, spellProcEvent);
+        ProcTriggeredData procTriggeredData(nullptr, itr->second);
+
+        SpellProcEventTriggerCheck result = IsTriggeredAtSpellProcEvent(execData, holder, procTriggeredData.spellProcEvent, procTriggeredData.canProc);
         if (holder->GetSpellProto()->HasAttribute(SPELL_ATTR_PROC_FAILURE_BURNS_CHARGE) &&
             result == SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_ROLL_FAILED && holder->GetAuraCharges() > 0)
             holdersForDeletion.push_back(holder);
@@ -555,16 +557,16 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
         if (holder->GetSpellProto()->HasAttribute(SPELL_ATTR_EX2_PROC_COOLDOWN_ON_FAILURE) && result == SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_ROLL_FAILED)
         {
             uint32 cooldown = 0;
-            if (spellProcEvent && spellProcEvent->cooldown)
-                cooldown = spellProcEvent->cooldown;
+            if (procTriggeredData.spellProcEvent && procTriggeredData.spellProcEvent->cooldown)
+                cooldown = procTriggeredData.spellProcEvent->cooldown;
             if (cooldown)
-                holder->SetProcCooldown(std::chrono::seconds(cooldown), GetMap()->GetCurrentClockTime());
+                holder->SetProcCooldown(std::chrono::milliseconds(cooldown), GetMap()->GetCurrentClockTime());
         }
 
         if (result != SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_OK)
             continue;
 
-        procTriggered.push_back(ProcTriggeredData(spellProcEvent, itr->second));
+        procTriggered.emplace_back(procTriggeredData);
     }
 
     for (SpellAuraHolder* holder : holdersForDeletion)
@@ -576,7 +578,7 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
         return;
 
     // Handle effects proceed this time
-    for (ProcTriggeredList::const_iterator itr = procTriggered.begin(); itr != procTriggered.end(); ++itr)
+    for (ProcTriggeredVector::const_iterator itr = procTriggered.begin(); itr != procTriggered.end(); ++itr)
     {
         // Some auras can be deleted in function called in this loop (except first, ofc)
         SpellAuraHolder* triggeredByHolder = itr->triggeredByHolder;
@@ -600,32 +602,8 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
 
             Modifier* auraModifier = execData.triggeredByAura->GetModifier();
 
-            if (execData.spellInfo)
-            {
-                if (spellProcEvent)
-                {
-                    if (spellProcEvent->spellFamilyMask[i])
-                    {
-                        if (!execData.spellInfo->IsFitToFamilyMask(spellProcEvent->spellFamilyMask[i]))
-                            continue;
-
-                        // don't allow proc from cast end for non modifier spells
-                        // unless they have proc ex defined for that
-                        if (IsCastEndProcModifierAura(triggeredByHolder->GetSpellProto(), SpellEffectIndex(i), execData.spellInfo))
-                        {
-                            if (useCharges && execData.procExtra != PROC_EX_CAST_END && spellProcEvent->procEx == PROC_EX_NONE)
-                                continue;
-                        }
-                        else if (spellProcEvent->procEx == PROC_EX_NONE && execData.procExtra == PROC_EX_CAST_END)
-                            continue;
-                    }
-                    // don't check dbc FamilyFlags if schoolMask exists
-                    else if (!execData.triggeredByAura->CanProcFrom(execData.spellInfo, execData.procFlags, spellProcEvent->procEx, execData.procExtra, execData.damage != 0, execData.absorb != 0, !spellProcEvent->schoolMask))
-                        continue;
-                }
-                else if (!execData.triggeredByAura->CanProcFrom(execData.spellInfo, execData.procFlags, PROC_EX_NONE, execData.procExtra, execData.damage != 0, execData.absorb != 0, true))
-                    continue;
-            }
+            if (itr->canProc[i] == false)
+                continue;
 
             execData.triggeredSpellId = 0;
             execData.basepoints = { 0, 0, 0 };
@@ -637,9 +615,7 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
                 case SPELL_AURA_PROC_CANT_TRIGGER:
                     continue;
                 case SPELL_AURA_PROC_FAILED:
-                    // example - drain soul vanilla - third effect fails when not have talent but charge should drop
-                    if (!triggeredByHolder->GetSpellProto()->HasAttribute(SPELL_ATTR_PROC_FAILURE_BURNS_CHARGE))
-                        procSuccess = false;
+                    procSuccess = false;
                     break;
                 case SPELL_AURA_PROC_OK:
                     if (execData.procOnce && execData.spell)
@@ -650,11 +626,12 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
             anyAuraProc = true;
         }
 
-        if (procSuccess && execData.cooldown)
-            triggeredByHolder->SetProcCooldown(std::chrono::seconds(execData.cooldown), GetMap()->GetCurrentClockTime());
+        if ((procSuccess || triggeredByHolder->GetSpellProto()->HasAttribute(SPELL_ATTR_EX2_PROC_COOLDOWN_ON_FAILURE)) && anyAuraProc && execData.cooldown)
+            triggeredByHolder->SetProcCooldown(std::chrono::milliseconds(execData.cooldown), GetMap()->GetCurrentClockTime());
 
         // Remove charge (aura can be removed by triggers)
-        if (useCharges && procSuccess && anyAuraProc && !triggeredByHolder->IsDeleted())
+        // Attribute example - drain soul vanilla - third effect fails when not have talent but charge should drop
+        if (useCharges && (procSuccess || triggeredByHolder->GetSpellProto()->HasAttribute(SPELL_ATTR_PROC_FAILURE_BURNS_CHARGE)) && anyAuraProc && !triggeredByHolder->IsDeleted())
         {
             // If last charge dropped add spell to remove list
             if (triggeredByHolder->DropAuraCharge())
@@ -663,7 +640,7 @@ void Unit::ProcDamageAndSpellFor(ProcSystemArguments& argData, bool isVictim)
     }
 }
 
-Unit::SpellProcEventTriggerCheck Unit::IsTriggeredAtSpellProcEvent(ProcExecutionData& data, SpellAuraHolder* holder, SpellProcEventEntry const*& spellProcEvent)
+Unit::SpellProcEventTriggerCheck Unit::IsTriggeredAtSpellProcEvent(ProcExecutionData& data, SpellAuraHolder* holder, SpellProcEventEntry const*& spellProcEvent, bool (&canProc)[MAX_EFFECT_INDEX])
 {
     SpellEntry const* spellProto = holder->GetSpellProto();
 
@@ -782,13 +759,67 @@ Unit::SpellProcEventTriggerCheck Unit::IsTriggeredAtSpellProcEvent(ProcExecution
         for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
             if (Aura* aura = holder->m_auras[i])
                 if (data.spell->IsAuraProcced(aura))
-                    return SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_FAILED;
+                    canProc[i] = false;
     }
 
     for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
         if (Aura* aura = holder->m_auras[i])
             if (!aura->OnCheckProc(data))
-                return SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_FAILED;
+                canProc[i] = false;
+
+    if (data.spellInfo)
+    {
+        bool useCharges = holder->GetAuraCharges() > 0;
+        for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        {
+            if (Aura* aura = holder->m_auras[i])
+            {
+                if (spellProcEvent)
+                {
+                    if (spellProcEvent->spellFamilyMask[i])
+                    {
+                        if (!data.spellInfo->IsFitToFamilyMask(spellProcEvent->spellFamilyMask[i]))
+                        {
+                            canProc[i] = false;
+                            continue;
+                        }
+
+                        // don't allow proc from cast end for non modifier spells
+                        // unless they have proc ex defined for that
+                        if (IsCastEndProcModifierAura(holder->GetSpellProto(), SpellEffectIndex(i), data.spellInfo))
+                        {
+                            if (useCharges && data.procExtra != PROC_EX_CAST_END && spellProcEvent->procEx == PROC_EX_NONE)
+                            {
+                                canProc[i] = false;
+                                continue;
+                            }
+                        }
+                        else if (spellProcEvent->procEx == PROC_EX_NONE && data.procExtra == PROC_EX_CAST_END)
+                        {
+                            canProc[i] = false;
+                            continue;
+                        }
+                    }
+                    // don't check dbc FamilyFlags if schoolMask exists
+                    else if (!aura->CanProcFrom(data.spellInfo, data.procFlags, spellProcEvent->procEx, data.procExtra, data.damage != 0, data.absorb != 0, !spellProcEvent->schoolMask))
+                    {
+                        canProc[i] = false;
+                        continue;
+                    }
+                }
+                else if (!aura->CanProcFrom(data.spellInfo, data.procFlags, PROC_EX_NONE, data.procExtra, data.damage != 0, data.absorb != 0, true))
+                {
+                    canProc[i] = false;
+                    continue;
+                }
+            }
+            else
+                canProc[i] = false;
+        }
+    }
+
+    if (!canProc[EFFECT_INDEX_0] && !canProc[EFFECT_INDEX_1] && !canProc[EFFECT_INDEX_2])
+        return SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_FAILED;
 
     if (roll_chance_f(chance))
         return SpellProcEventTriggerCheck::SPELL_PROC_TRIGGER_OK;
@@ -831,7 +862,7 @@ SpellAuraProcResult Unit::TriggerProccedSpell(Unit* target, std::array<int32, MA
         CastSpell(target, spellInfo, TRIGGERED_OLD_TRIGGERED | TRIGGERED_INSTANT_CAST | TRIGGERED_DO_NOT_RESET_LEASH, castItem, triggeredByAura, originalCaster);
 
     if (cooldown)
-        triggeredByAura->GetHolder()->SetProcCooldown(std::chrono::seconds(cooldown), GetMap()->GetCurrentClockTime());
+        triggeredByAura->GetHolder()->SetProcCooldown(std::chrono::milliseconds(cooldown), GetMap()->GetCurrentClockTime());
 
     return SPELL_AURA_PROC_OK;
 }
@@ -1131,31 +1162,6 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(ProcExecutionData& data)
 
                     target = this;
                     triggered_spell_id = 33494;
-                    break;
-                }
-                // Elemental Sieve
-                case 36035:
-                {
-                    Pet* pCaster = dynamic_cast<Pet*>(triggeredByAura->GetCaster());
-
-                    // aura only affect the spirit totem, since this is the one that need to be in range.
-                    // It is possible though, that player is the one who should actually have the aura
-                    // and check for presense of spirit totem, but then we can't script the dummy.
-                    if (!pCaster)
-                        return SPELL_AURA_PROC_FAILED;
-
-                    // Summon the soul of the spirit and cast the visual
-                    uint32 uiSoulEntry = 0;
-                    switch (GetEntry())
-                    {
-                        case 21050: uiSoulEntry = 21073; break; // Earthen Soul
-                        case 21061: uiSoulEntry = 21097; break; // Fiery Soul
-                        case 21059: uiSoulEntry = 21109; break; // Watery Soul
-                        case 21060: uiSoulEntry = 21116; break; // Airy Soul
-                    }
-
-                    CastSpell(this, 36206, TRIGGERED_OLD_TRIGGERED);
-                    pCaster->SummonCreature(uiSoulEntry, GetPositionX(), GetPositionY(), GetPositionZ(), 0, TEMPSPAWN_TIMED_OOC_OR_CORPSE_DESPAWN, 10000);
                     break;
                 }
                 // Vampiric Aura (boss spell)
@@ -3855,7 +3861,7 @@ SpellAuraProcResult Unit::HandleProcTriggerDamageAuraProc(ProcExecutionData& dat
     }
 
     if (cooldown)
-        triggeredByAura->GetHolder()->SetProcCooldown(std::chrono::seconds(cooldown), GetMap()->GetCurrentClockTime());
+        triggeredByAura->GetHolder()->SetProcCooldown(std::chrono::milliseconds(cooldown), GetMap()->GetCurrentClockTime());
 
     SpellNonMeleeDamage spellDamageInfo(this, victim, spellInfo->Id, SpellSchoolMask(spellInfo->SchoolMask));
     CalculateSpellDamage(&spellDamageInfo, triggeredByAura->GetModifier()->m_amount, spellInfo, triggeredByAura->GetEffIndex());
@@ -3893,15 +3899,6 @@ SpellAuraProcResult Unit::HandleOverrideClassScriptAuraProc(ProcExecutionData& d
             // Check that only priest class can proc it is done in Spell::CheckTargetScript() for aura 23401
             if (IsSpellHaveEffect(spellInfo, SPELL_EFFECT_HEAL))
                 triggered_spell_id = 23402;
-            break;
-        }
-        case 4086:                                          // Improved Mend Pet (Rank 1)
-        case 4087:                                          // Improved Mend Pet (Rank 2)
-        {
-            if (!roll_chance_i(triggerAmount))
-                return SPELL_AURA_PROC_FAILED;
-
-            triggered_spell_id = 24406;
             break;
         }
         case 4533:                                          // Dreamwalker Raiment 2 pieces bonus

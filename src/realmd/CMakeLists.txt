@@ -45,6 +45,7 @@ add_executable(${EXECUTABLE_NAME}
 
 target_link_libraries(${EXECUTABLE_NAME}
   shared
+  cmangos-compile-option-interface
 )
 
 if(WIN32)
@@ -61,10 +62,7 @@ if(WIN32)
   endif()
 
   # Define OutDir to source/bin/(platform)_(configuaration) folder.
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${DEV_BIN_DIR}")
-  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${DEV_BIN_DIR}")
+  set_target_properties(${EXECUTABLE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${DEV_BIN_DIR}")
   set_target_properties(${EXECUTABLE_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${DEV_BIN_DIR}")
   set_target_properties(${EXECUTABLE_NAME} PROPERTIES PROJECT_LABEL "AuthServer")
 
@@ -80,7 +78,7 @@ if(UNIX)
 endif()
 
 if(APPLE)
-  set(EXECUTABLE_LINK_FLAGS "-framework Carbon ${EXECUTABLE_LINK_FLAGS}")
+  set(EXECUTABLE_LINK_FLAGS "-Wl,-no_fixup_chains -framework Carbon ${EXECUTABLE_LINK_FLAGS}")
 endif()
 
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS
@@ -94,5 +92,5 @@ install(TARGETS ${EXECUTABLE_NAME} DESTINATION ${BIN_DIR})
 install(FILES realmd.conf.dist.in DESTINATION ${CONF_DIR} RENAME realmd.conf.dist)
 
 if(MSVC)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/\${BUILD_TYPE}/${EXECUTABLE_NAME}.pdb DESTINATION ${BIN_DIR} CONFIGURATIONS Debug)
+  install(FILES $<TARGET_PDB_FILE:${EXECUTABLE_NAME}> DESTINATION ${BIN_DIR} CONFIGURATIONS Debug)
 endif()

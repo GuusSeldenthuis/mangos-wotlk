@@ -1283,12 +1283,18 @@ bool ChatHandler::HandleGameObjectNearCommand(char* args)
             const char* name = "Random (gameobject_spawn_entry)";
             if (gInfo)
                 name = gInfo->name;
+            else if (sObjectMgr.GetRandomGameObjectEntry(guid) == 0)
+                name = "Random (spawn_group_entry)";
 
             uint32 spawnGroupId = 0;
             if (SpawnGroupEntry* groupEntry = pl->GetMap()->GetMapDataContainer().GetSpawnGroupByGuid(guid, TYPEID_GAMEOBJECT))
                 spawnGroupId = groupEntry->Id;
 
-            PSendSysMessage(LANG_GO_MIXED_LIST_CHAT, guid, PrepareStringNpcOrGoSpawnInformation<GameObject>(guid).c_str(), entry, guid, name, x, y, z, mapid, spawnGroupId);
+            uint32 dynGuid = 0;
+            if (GameObject* go = pl->GetMap()->GetGameObject(guid))
+                dynGuid = go->GetGUIDLow();
+
+            PSendSysMessage(LANG_GO_MIXED_LIST_CHAT, guid, PrepareStringNpcOrGoSpawnInformation<GameObject>(guid).c_str(), entry, dynGuid, entry, name, x, y, z, mapid, spawnGroupId);
 
 
             ++count;
@@ -1431,7 +1437,7 @@ bool ChatHandler::HandleGUIDCommand(char* /*args*/)
     return true;
 }
 
-void ChatHandler::ShowAchievementListHelper(AchievementEntry const* achEntry, LocaleConstant loc, time_t const* date /*= nullptr*/, Player* target /*= nullptr */)
+void ChatHandler::ShowAchievementListHelper(AchievementEntry const* achEntry, LocaleConstant loc, TimePoint const* updateDate /*= nullptr*/, Player* target /*= nullptr */)
 {
     std::string name = achEntry->name[loc];
 
@@ -1442,10 +1448,11 @@ void ChatHandler::ShowAchievementListHelper(AchievementEntry const* achEntry, Lo
     if (m_session)
     {
         ss << achEntry->ID << " - |cffffffff|Hachievement:" << achEntry->ID << ":" << std::hex << guid.GetRawValue() << std::dec;
-        if (date)
+        if (updateDate)
         {
             // complete date
-            tm* aTm = localtime(date);
+            time_t timeDate = std::chrono::system_clock::to_time_t(*updateDate);
+            tm* aTm = localtime(&timeDate);
             ss << ":1:" << aTm->tm_mon + 1 << ":" << aTm->tm_mday << ":" << (aTm->tm_year + 1900 - 2000) << ":";
 
             // complete criteria mask (all bits set)
@@ -1462,7 +1469,7 @@ void ChatHandler::ShowAchievementListHelper(AchievementEntry const* achEntry, Lo
                 uint32 criteriaMask[4] = {0, 0, 0, 0};
 
                 if (AchievementMgr const* mgr = target ? &target->GetAchievementMgr() : nullptr)
-                    if (AchievementCriteriaEntryList const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
+                    if (AchievementCriteriaEntryVector const* criteriaList = sAchievementMgr.GetAchievementCriteriaByAchievement(achEntry->ID))
                         for (auto itr : *criteriaList)
                             if (mgr->IsCompletedCriteria(itr, achEntry))
                                 criteriaMask[(itr->showOrder - 1) / 32] |= (1 << ((itr->showOrder - 1) % 32));
@@ -1479,8 +1486,8 @@ void ChatHandler::ShowAchievementListHelper(AchievementEntry const* achEntry, Lo
     else
         ss << achEntry->ID << " - " << name << " " << localeNames[loc];
 
-    if (target && date)
-        ss << " [" << TimeToTimestampStr(*date) << "]";
+    if (target && updateDate)
+        ss << " [" << TimeToTimestampStr(std::chrono::system_clock::to_time_t(*updateDate)) << "]";
 
     SendSysMessage(ss.str().c_str());
 }
@@ -1535,7 +1542,7 @@ bool ChatHandler::HandleLookupAchievementCommand(char* args)
         if (loc < MAX_LOCALE)
         {
             CompletedAchievementData const* completed = target ? target->GetAchievementMgr().GetCompleteData(id) : nullptr;
-            ShowAchievementListHelper(achEntry, LocaleConstant(loc), completed ? &completed->date : nullptr, target);
+            ShowAchievementListHelper(achEntry, LocaleConstant(loc), completed ? &completed->updateDate : nullptr, target);
             ++counter;
         }
     }
@@ -1557,7 +1564,7 @@ bool ChatHandler::HandleCharacterAchievementsCommand(char* args)
     for (const auto& itr : complitedList)
     {
         AchievementEntry const* achEntry = sAchievementStore.LookupEntry(itr.first);
-        ShowAchievementListHelper(achEntry, loc, &itr.second.date, target);
+        ShowAchievementListHelper(achEntry, loc, &itr.second.updateDate, target);
     }
     return true;
 }
@@ -2068,7 +2075,9 @@ bool ChatHandler::HandleNpcDeleteCommand(char* args)
         case CREATURE_SUBTYPE_GENERIC:
         {
             unit->CombatStop();
-            if (CreatureData const* data = sObjectMgr.GetCreatureData(unit->GetDbGuid()))
+            if (unit->IsUsingNewSpawningSystem()) // might be used in spawn group or scheduled for respawn already
+                unit->AddObjectToRemoveList();
+            else if (CreatureData const* data = sObjectMgr.GetCreatureData(unit->GetDbGuid()))
             {
                 // chat commands execute in world thread so should be thread safe for now
                 sMapMgr.DoForAllMapsWithMapId(data->mapid, [&](Map* map)
@@ -3010,7 +3019,7 @@ inline Creature* Helper_CreateWaypointFor(Creature* wpOwner, WaypointPathOrigin 
     TempSpawnSettings settings;
     settings.spawner = wpOwner;
     settings.entry = VISUAL_WAYPOINT;
-    settings.x = wpNode->x; settings.y = wpNode->y; settings.z = wpNode->z; settings.ori = wpNode->orientation;
+    settings.x = wpNode->x; settings.y = wpNode->y; settings.z = wpNode->z; settings.ori = wpNode->orientation ? *wpNode->orientation : 0.f;
     settings.activeObject = true;
     settings.spawnDataEntry = 2;
     settings.spawnType = TEMPSPAWN_TIMED_DESPAWN;
@@ -3569,8 +3578,8 @@ bool ChatHandler::HandleWpShowCommand(char* args)
         if (mgenType == WAYPOINT_MOTION_TYPE || mgenType == LINEAR_WP_MOTION_TYPE || mgenType == PATH_MOTION_TYPE)
         {
             uint32 pathEntry = wpOwner->GetEntry();
-            if (targetCreature->GetCreatureGroup() && targetCreature->GetCreatureGroup()->GetFormationEntry())
-                pathEntry = targetCreature->GetCreatureGroup()->GetFormationEntry()->MovementIdOrWander;
+            if (targetCreature->GetCreatureGroup() && targetCreature->GetCreatureGroup()->GetFormationData())
+                pathEntry = targetCreature->GetCreatureGroup()->GetFormationData()->GetFormationEntry().MovementIdOrWander;
             if (WaypointMovementGenerator<Creature> const* wpMMGen = dynamic_cast<WaypointMovementGenerator<Creature> const*>(wpOwner->GetMotionMaster()->GetCurrent()))
             {
                 wpMMGen->GetPathInformation(wpPathId, wpOrigin);
@@ -3807,7 +3816,7 @@ bool ChatHandler::HandleWpExportCommand(char* args)
         outfile << itr->second.x << ",";
         outfile << itr->second.y << ",";
         outfile << itr->second.z << ",";
-        outfile << itr->second.orientation << ",";
+        outfile << (itr->second.orientation ? *itr->second.orientation : 100.f) << ",";
         outfile << itr->second.delay << ",";
         if (wpOrigin != PATH_FROM_EXTERNAL)                 // Only for normal waypoints
             outfile << itr->second.script_id << ")";
@@ -5238,6 +5247,13 @@ bool ChatHandler::HandleTitlesCurrentCommand(char* args)
 
 bool ChatHandler::HandleMmapPathCommand(char* args)
 {
+    auto mmap = MMAP::MMapFactory::createOrGetMMapManager();
+    if (!mmap->IsEnabled())
+    {
+        PSendSysMessage("Mmap is not enabled.");
+        return true;
+    }
+
     Player* player = m_session->GetPlayer();
     if (GenericTransport* transport = player->GetTransport())
     {
@@ -5358,7 +5374,13 @@ bool ChatHandler::HandleMmapLocCommand(char* /*args*/)
     PSendSysMessage("gridloc [%i,%i]", gy, gx);
 
     // calculate navmesh tile location
-    const dtNavMesh* navmesh = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMesh(player->GetMapId(), player->GetInstanceId());
+    auto mmap = MMAP::MMapFactory::createOrGetMMapManager();
+    if (!mmap->IsEnabled())
+    {
+        PSendSysMessage("Mmap is not enabled.");
+        return true;
+    }
+    const dtNavMesh* navmesh = mmap->GetNavMesh(player->GetMapId(), player->GetInstanceId());
     const dtNavMeshQuery* navmeshquery = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMeshQuery(player->GetMapId(), player->GetInstanceId());
     if (!navmesh || !navmeshquery)
     {
@@ -5401,11 +5423,18 @@ bool ChatHandler::HandleMmapLocCommand(char* /*args*/)
 
 bool ChatHandler::HandleMmapLoadedTilesCommand(char* /*args*/)
 {
+    auto mmap = MMAP::MMapFactory::createOrGetMMapManager();
+    if (!mmap->IsEnabled())
+    {
+        PSendSysMessage("Mmap is not enabled.");
+        return true;
+    }
+
     uint32 mapId = m_session->GetPlayer()->GetMapId();
     uint32 instanceId = m_session->GetPlayer()->GetInstanceId();
 
-    const dtNavMesh* navmesh = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMesh(mapId, instanceId);
-    const dtNavMeshQuery* navmeshquery = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMeshQuery(mapId, m_session->GetPlayer()->GetInstanceId());
+    const dtNavMesh* navmesh = mmap->GetNavMesh(mapId, instanceId);
+    const dtNavMeshQuery* navmeshquery = mmap->GetNavMeshQuery(mapId, m_session->GetPlayer()->GetInstanceId());
     if (!navmesh || !navmeshquery)
     {
         PSendSysMessage("NavMesh not loaded for current map.");
@@ -5428,13 +5457,19 @@ bool ChatHandler::HandleMmapLoadedTilesCommand(char* /*args*/)
 
 bool ChatHandler::HandleMmapStatsCommand(char* /*args*/)
 {
+    auto mmap = MMAP::MMapFactory::createOrGetMMapManager();
+    if (!mmap->IsEnabled())
+    {
+        PSendSysMessage("Mmap is not enabled.");
+        return true;
+    }
+
     PSendSysMessage("mmap stats:");
     PSendSysMessage("  global mmap pathfinding is %sabled", sWorld.getConfig(CONFIG_BOOL_MMAP_ENABLED) ? "en" : "dis");
 
-    MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
-    PSendSysMessage(" %u maps loaded with %u tiles overall", manager->getLoadedMapsCount(), manager->getLoadedTilesCount());
+    PSendSysMessage(" %u maps loaded with %u tiles overall", mmap->getLoadedMapsCount(), mmap->getLoadedTilesCount());
 
-    const dtNavMesh* navmesh = manager->GetNavMesh(m_session->GetPlayer()->GetMapId(), m_session->GetPlayer()->GetInstanceId());
+    const dtNavMesh* navmesh = mmap->GetNavMesh(m_session->GetPlayer()->GetMapId(), m_session->GetPlayer()->GetInstanceId());
     if (!navmesh)
     {
         PSendSysMessage("NavMesh not loaded for current map.");

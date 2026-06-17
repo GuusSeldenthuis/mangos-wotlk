@@ -31,6 +31,7 @@ EndContentData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "AI/ScriptDevAI/base/escort_ai.h"
+#include "AI/BaseAI/PetAI.h"
 #include "Entities/Vehicle.h"
 
 /*######
@@ -920,24 +921,38 @@ UnitAI* GetAI_npc_grand_admiral_westwind(Creature* pCreature)
     return new npc_grand_admiral_westwindAI(pCreature);
 }
 
-bool EffectDummyCreature_npc_grand_admiral_westwind(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 31699 - The Admiral Revealed: Lord-Commander's Nullifier Effect
+struct TheAdmiralRevealedLordCommandersNullifierEffect : public SpellScript
 {
-    if (uiSpellId == SPELL_NULLIFIER && uiEffIndex == EFFECT_INDEX_0 && pCaster->GetTypeId() == TYPEID_PLAYER)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        if (!pCreatureTarget->HasAura(SPELL_PROTECTION_SPHERE))
-            return true;
+        Unit* caster = spell->GetCaster();
+        Unit* target = spell->GetUnitTarget();
+        if (!target->HasAura(SPELL_PROTECTION_SPHERE))
+            return;
 
-        pCreatureTarget->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pCaster, pCreatureTarget);
-        return true;
+        target->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, caster, target);
     }
-
-    return false;
-}
+};
 
 /*######
-## spell_create_lance - 63845
+## go_bloodstained_stone
 ######*/
 
+struct go_bloodstained_stone : public GameObjectAI
+{
+    go_bloodstained_stone(GameObject* go) : GameObjectAI(go)
+    {
+        go->GetVisibilityData().SetInvisibilityMask(9, true);
+        go->GetVisibilityData().AddInvisibilityValue(9, 100);
+    }
+};
+
+/*######
+// Spells
+######*/
+
+// spell_create_lance - 63845
 struct SpellCreateLanceData
 {
     Races playerRace;
@@ -958,7 +973,7 @@ static const SpellCreateLanceData createLanceData[] =
     {RACE_BLOODELF, 63923, 46070},
 };
 
-struct spell_create_lance : public SpellScript
+struct CreateLance : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
@@ -1053,7 +1068,6 @@ struct ToIcecrownAirshipHSummonVehicle : public SpellScript
 // 57650 - Frozen Siegebolt
 // 57666 - Frozen Siegebolt
 // 57667 - Frozen Siegebolt
-
 struct FrozenSiegebolt : public SpellScript
 {
     void OnRadiusCalculate(Spell* /*spell*/, SpellEffectIndex effIdx, bool /*targetB*/, float& radius) const override
@@ -1149,6 +1163,263 @@ struct DragAndDropSummonAldurtharSentry : public SpellScript
     }
 };
 
+// 60528 - Rod of Siphoning
+struct RodOfSiphoning : public AuraScript
+{
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.caster = aura->GetCaster();
+        data.target = nullptr;
+    }
+};
+
+// 60561 - Summon Dark Messenger Beam
+struct SummonDarkMessengerBeam : public SpellScript, public AuraScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        if (spell->GetCaster()->IsPlayer())
+        {
+            Player* player = static_cast<Player*>(spell->GetCaster());
+            if (!player->HasItemCount(44434, 5))
+            {
+                return SPELL_FAILED_REAGENTS;
+            }
+        }
+        return SPELL_CAST_OK;
+    }
+
+    void OnSpellCastResultOverride(SpellCastResult& result, uint32& param1, uint32& param2) const override
+    {
+        if (result == SPELL_FAILED_REAGENTS)
+        {
+            result = SPELL_FAILED_CUSTOM_ERROR;
+            param1 = SPELL_FAILED_CUSTOM_ERROR_55;
+        }
+    }
+
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.caster = aura->GetCaster();
+        data.target = nullptr;
+        data.triggerFlags |= TRIGGERED_FORCE_COSTS;
+    }
+};
+
+// 60831 - Alumeth's Remains
+struct AlumethsRemains : public SpellScript, public AuraScript
+{
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.caster = aura->GetCaster();
+        data.target = nullptr;
+        data.triggerFlags |= TRIGGERED_FORCE_COSTS;
+    }
+};
+
+// 60079 - Fire SGM-3
+struct FireSGM3 : public SpellScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetEntry() != 32189)
+            return SPELL_FAILED_BAD_TARGETS;
+
+        return SPELL_CAST_OK;
+    }
+};
+
+// 61171 - Burning
+struct Burning : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply)
+            aura->ForcePeriodicity(1 * IN_MILLISECONDS); // tick every second
+    }
+
+    void OnPeriodicTickEnd(Aura* aura) const override
+    {
+        Unit* target = aura->GetTarget();
+        Unit::DealDamage(target, target, 1000, nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
+    }
+};
+
+// 59288 - Infra-Green Shield
+struct InfraGreenShield : public AuraScript
+{
+    void OnPeriodicTickEnd(Aura* aura) const override
+    {
+        Unit* caster = aura->GetCaster();
+        caster->RemoveAuraStack(59288);
+    }
+};
+
+// 56578 - Rapid-Fire Harpoon
+struct RapidFireHarpoon : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0)
+            return;
+
+        spell->SetDamage(spell->GetUnitTarget()->GetMaxHealth() * spell->GetDamage() / 100); // percentage of effect
+    }
+};
+
+// 25730 - Find the Ancient Hero: The Bone Witch's Amulet Effect
+struct FindtheAncientHero : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->GetMotionMaster()->MoveFollow(spell->GetCaster(), PET_FOLLOW_DIST, PET_FOLLOW_ANGLE, true);
+    }
+};
+
+// 57853 - Master Summoner's Staff
+struct MasterSummonersStaff : public SpellScript, public AuraScript
+{
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.caster = aura->GetCaster();
+        data.target = nullptr;
+    }
+};
+
+// 58569 - Burning Skeleton
+struct BurningSkeleton : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+        summon->AI()->SetReactState(REACT_PASSIVE);
+    }
+};
+
+// 59724 - Refurbished Demolisher
+struct RefurbishedDemolisher : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+    }
+};
+
+// 58524 - Control Eidolon Watcher
+struct ControlEidolonWatcher : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->SelectLevel(spell->GetCaster()->GetLevel());
+        summon->SetFactionTemporary(spell->GetCaster()->GetFaction());
+    }
+};
+
+// 58203 - Iron Chain
+struct IronChain : public SpellScript, public AuraScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetEntry() != 31075)
+            return SPELL_FAILED_BAD_TARGETS;
+
+        return SPELL_CAST_OK;
+    }
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        Unit* caster = aura->GetCaster();
+        if (!caster || !aura->GetTarget()->IsCreature())
+            return;
+        if (!apply)
+            return;
+
+        aura->GetTarget()->GetMotionMaster()->MoveFollow(caster, 2.0f, M_PI_F, true);
+    }
+};
+
+// 60987 - Summon Ominous Cloud
+struct SummonOminousCloud : public SpellScript
+{
+    void OnDestTarget(Spell* spell) const override
+    {
+        spell->m_targets.m_destPos.z += 5.f;
+    }
+};
+
+/*######
+## npc_lithe_stalker
+######*/
+
+enum
+{
+    NPC_LITHE_STALKER = 30894,
+
+    SPELL_SUBDUED_LITHE_STALKER    = 58151,        // Subdued Lithe Stalker
+    SPELL_CSA_DUMMY_EFFECT         = 58178,        // CSA Dummy Effect (25 yards)
+    SPELL_GEIST_RETURN_KILL_CREDIR = 58190,
+
+    SAY_AT50HP                     = 31580,
+};
+
+enum LitheStalkerActions
+{
+    LITHER_STALKER_BELOW_50 = 0,
+    LITHER_STALKER_MAX,
+};
+
+// 58151 - Subdued Lithe Stalker
+struct SubduedLitheStalker : public SpellScript, public AuraScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        // Subdued Lithe Stalker can be cast only on less than 50% HP - 30894
+        if (target->GetHealthPercent() > 50.0f || !target || target->GetEntry() != NPC_LITHE_STALKER)
+            return SPELL_FAILED_BAD_TARGETS;
+
+        return SPELL_CAST_OK;
+    }
+};
+
+struct npc_lithe_stalker : public PetAI
+{
+    npc_lithe_stalker(Creature* creature) : PetAI(creature, LITHER_STALKER_MAX)
+    {
+        AddTimerlessCombatAction(LITHER_STALKER_BELOW_50, true);
+        Reset();
+    }
+
+    bool CanHandleCharm() const override { return true; }
+
+    void ExecuteAction(uint32 action) override
+    {
+        switch (action)
+        {
+            case LITHER_STALKER_BELOW_50:
+                if (m_creature->GetHealthPercent() <= 50.0f)
+                {
+                    DoBroadcastText(SAY_AT50HP, m_creature);
+                    DisableCombatAction(action);
+                }
+                break;
+        }
+    }
+
+    void SpellHit(Unit* /*pCaster*/, const SpellEntry* pSpell) override
+    {
+        if (pSpell->Id == SPELL_CSA_DUMMY_EFFECT)
+        {
+            SetFollowMovement(false);
+            m_creature->CastSpell(nullptr, 58190, TRIGGERED_OLD_TRIGGERED);
+            m_creature->GetMotionMaster()->MoveWaypoint(1, FORCED_MOVEMENT_RUN);
+        }
+    }
+};
+
 void AddSC_icecrown()
 {
     Script* pNewScript = new Script;
@@ -1177,10 +1448,20 @@ void AddSC_icecrown()
     pNewScript = new Script;
     pNewScript->Name = "npc_grand_admiral_westwind";
     pNewScript->GetAI = &GetAI_npc_grand_admiral_westwind;
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_grand_admiral_westwind;
     pNewScript->RegisterSelf();
 
-    RegisterSpellScript<spell_create_lance>("spell_create_lance");
+    pNewScript = new Script;
+    pNewScript->Name = "go_bloodstained_stone";
+    pNewScript->GetGameObjectAI = &GetNewAIInstance<go_bloodstained_stone>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_lithe_stalker_1";
+    pNewScript->GetAI = &GetNewAIInstance<npc_lithe_stalker>;
+    pNewScript->RegisterSelf();
+
+    RegisterSpellScript<TheAdmiralRevealedLordCommandersNullifierEffect>("spell_the_admiral_revealed_lord_commanders_nullify_effect");
+    RegisterSpellScript<CreateLance>("spell_create_lance");
     RegisterSpellScript<GrabCapturedCrusader>("spell_grab_captured_crusader");
     RegisterSpellScript<DropOffCapturedCrusader>("spell_drop_off_captured_crusader");
     RegisterSpellScript<ToIcecrownAirshipASummonVehicle>("spell_to_icecrown_air_ship_a_summon_vehicle");
@@ -1193,4 +1474,19 @@ void AddSC_icecrown()
     RegisterSpellScript<RideVehicle_57346>("spell_ride_vehicle_57346");
     RegisterSpellScript<SummonFrostWyrm>("spell_summon_frost_wyrm");
     RegisterSpellScript<DragAndDropSummonAldurtharSentry>("spell_drag_and_drop_summon_aldurthar_sentry");
+    RegisterSpellScript<RodOfSiphoning>("spell_rod_of_siphoning");
+    RegisterSpellScript<SummonDarkMessengerBeam>("spell_summon_dark_messenger_beam");
+    RegisterSpellScript<AlumethsRemains>("spell_alumeths_remains");
+    RegisterSpellScript<FireSGM3>("spell_fire_sgm3");
+    RegisterSpellScript<Burning>("spell_burning");
+    RegisterSpellScript<InfraGreenShield>("spell_infragreenshield");
+    RegisterSpellScript<RapidFireHarpoon>("spell_rapid_fire_harpoon");
+    RegisterSpellScript<FindtheAncientHero>("spell_find_the_ancient_hero");
+    RegisterSpellScript<MasterSummonersStaff>("spell_master_summoners_staff");
+    RegisterSpellScript<BurningSkeleton>("spell_burning_skeleton");
+    RegisterSpellScript<RefurbishedDemolisher>("spell_refurbished_demolisher");
+    RegisterSpellScript<ControlEidolonWatcher>("spell_control_eidolon_watcher");
+    RegisterSpellScript<IronChain>("spell_iron_chain");
+    RegisterSpellScript<SummonOminousCloud>("spell_summon_ominous_cloud");
+    RegisterSpellScript<SubduedLitheStalker>("spell_subdued_lithe_stalker");
 }

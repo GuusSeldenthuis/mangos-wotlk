@@ -87,6 +87,8 @@ void WaypointMovementGenerator<Creature>::Initialize(Creature& creature)
 {
     creature.addUnitState(UNIT_STAT_ROAMING);
     creature.clearUnitState(UNIT_STAT_WAYPOINT_PAUSED);
+
+    creature.GetMap()->AddWaypointingNpc(&creature);
 }
 
 void WaypointMovementGenerator<Creature>::InitializeWaypointPath(Creature& u, int32 pathId, WaypointPathOrigin wpSource, uint32 initialDelay, uint32 overwriteEntry/* = 0*/)
@@ -136,6 +138,8 @@ void WaypointMovementGenerator<Creature>::Finalize(Creature& creature)
 {
     creature.clearUnitState(UNIT_STAT_ROAMING | UNIT_STAT_ROAMING_MOVE);
     creature.SetWalk(!creature.hasUnitState(UNIT_STAT_RUNNING_STATE), false);
+
+    creature.GetMap()->RemoveWaypointingNpc(&creature);
 }
 
 void WaypointMovementGenerator<Creature>::Interrupt(Creature& creature)
@@ -395,8 +399,8 @@ void WaypointMovementGenerator<Creature>::SendNextWayPointPath(Creature& creatur
 
     Movement::MoveSplineInit init(creature);
     init.MovebyPath(genPath);
-    if (nextNode->orientation != 100 && nextNode->delay != 0)
-        init.SetFacing(nextNode->orientation);
+    if (nextNode->orientation && nextNode->delay != 0)
+        init.SetFacing(*nextNode->orientation);
     if (m_forcedMovement == FORCED_MOVEMENT_WALK)
         init.SetWalk(true);
     else if (m_forcedMovement == FORCED_MOVEMENT_RUN)
@@ -537,8 +541,8 @@ bool WaypointMovementGenerator<Creature>::GetResetPosition(Creature&, float& x, 
     y = curWP->y;
     z = curWP->z;
 
-    if (curWP->orientation != 100)
-        o = curWP->orientation;
+    if (curWP->orientation)
+        o = *curWP->orientation;
     else                                                    // Calculate the resulting angle based on positions between previous and current waypoint
     {
         WaypointNode const* prevWP;

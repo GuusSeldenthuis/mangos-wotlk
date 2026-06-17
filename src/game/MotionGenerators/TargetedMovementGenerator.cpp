@@ -141,6 +141,7 @@ void ChaseMovementGenerator::Initialize(Unit& owner)
     _setLocation(owner);
     i_target->GetPosition(i_lastTargetPos.x, i_lastTargetPos.y, i_lastTargetPos.z);
     m_fanningEnabled = !(owner.GetTypeId() == TYPEID_UNIT && static_cast<Creature&>(owner).IsWorldBoss());
+    m_backpedalEnabled = !(owner.GetTypeId() == TYPEID_UNIT && static_cast<Creature&>(owner).GetSettings().HasFlag(CreatureStaticFlags4::DONT_REPOSITION_IF_MELEE_TARGET_IS_TOO_CLOSE));
 }
 
 void ChaseMovementGenerator::Finalize(Unit& owner)
@@ -394,6 +395,9 @@ void ChaseMovementGenerator::Backpedal(Unit& owner)
     if (!owner.AI() || owner.AI()->GetCombatScriptStatus())
         return;
 
+    if (!m_backpedalEnabled)
+        return;
+
     m_closenessExpired = false;
     m_closenessAndFanningTimer = CHASE_CLOSENESS_TIMER; // Just in case path doesnt generate
     float targetDist = std::min(this->i_target->GetCombinedCombatReach(&owner, false), 3.75f);
@@ -565,7 +569,7 @@ bool ChaseMovementGenerator::DispatchSplineToPosition(Unit& owner, float x, floa
     init.MovebyPath(path);
     init.SetWalk(walk);
     if (owner.IsSlowedInCombat() && !walk)
-        init.SetCombatSlowed(std::min(owner.GetHealthPercent(), 20.f) * 0.02 + 0.4f);
+        init.SetCombatSlowed(1.f - ((30.f - std::min(owner.GetHealthPercent(), 30.f)) * 1.67) / 100);
     if (target)
         init.SetFacing(i_target.getTarget());
     init.Launch();
@@ -580,7 +584,11 @@ void ChaseMovementGenerator::CutPath(Unit& owner, PointsArray& path)
 {
     if (this->i_offset != 0.f) // need to cut path until most distant viable point
     {
+#ifdef ENABLE_PLAYERBOTS
+        const float dist = (i_offset * (owner.IsPlayer() ? 1.0f : CHASE_MOVE_CLOSER_FACTOR)) + (this->i_target->GetCombinedCombatReach(&owner, false) * CHASE_DEFAULT_RANGE_FACTOR);
+#else
         const float dist = (i_offset * CHASE_MOVE_CLOSER_FACTOR) + (this->i_target->GetCombinedCombatReach(&owner, false) * CHASE_DEFAULT_RANGE_FACTOR);
+#endif
         const float distSquared = (dist * dist);
         float tarX, tarY, tarZ;
         this->i_target->GetPosition(tarX, tarY, tarZ);
@@ -733,7 +741,12 @@ float FollowMovementGenerator::GetSpeed(Unit& owner) const
     // Followers sync with master's speed when not in combat
     // Use default speed when a mix of PC and NPC units involved (escorting?)
     if (owner.HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED) == i_target->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
+    {
+#ifdef ENABLE_PLAYERBOTS
+        if (!(!m_boost && owner.IsPlayer() && !((Player*)(&owner))->isRealPlayer())) //Do not speed up bots when not boosting. 
+#endif
         speed = i_target->GetSpeedInMotion();
+    }
 
     // Catchup boost is not allowed, stop here:
     if (!IsBoostAllowed(owner))
@@ -925,6 +938,8 @@ bool FollowMovementGenerator::Move(Unit& owner, float x, float y, float z)
     init.MovebyPath(path);
     init.SetWalk(EnableWalking());
     init.SetVelocity(GetSpeed(owner));
+    if (!i_target->IsMoving())
+        init.SetFacing(i_target->GetOrientation());
     init.Launch();
 
     return true;
@@ -934,8 +949,10 @@ bool FollowMovementGenerator::_getOrientation(Unit& owner, float& o) const
 {
     if (!i_target.isValid())
         return false;
-
-    o = (i_faceTarget ? owner.GetAngle(i_target.getTarget()) : i_target->GetOrientation());
+    if (owner.CannotTurn())
+        o = owner.GetOrientation();
+    else
+        o = (i_faceTarget ? owner.GetAngle(i_target.getTarget()) : i_target->GetOrientation());
     return true;
 }
 

@@ -126,6 +126,8 @@ uint32 GetSpellCastTime(SpellEntry const* spellInfo, WorldObject* caster, Spell*
                     }
                 }
                 break;
+            case 6249:
+                return 50000;
             case 46546: // Ritual of Summoning
                 return 0;
             default:
@@ -371,126 +373,6 @@ bool IsPassiveSpell(uint32 spellId)
 bool IsPassiveSpell(SpellEntry const* spellInfo)
 {
     return spellInfo->HasAttribute(SPELL_ATTR_PASSIVE);
-}
-
-SpellSpecific GetSpellSpecific(uint32 spellId)
-{
-    SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
-    if (!spellInfo)
-        return SPELL_NORMAL;
-
-    if (SpellSpecific food = sSpellMgr.GetSpellFoodSpecific(spellInfo))
-        return food;
-
-    switch (spellInfo->SpellFamilyName)
-    {
-        case SPELLFAMILY_MAGE:
-        {
-            // family flags 18(Molten), 25(Frost/Ice), 28(Mage)
-            if (spellInfo->SpellFamilyFlags & uint64(0x12040000))
-                return SPELL_MAGE_ARMOR;
-
-            // Arcane Power (using id instead of mask):
-            if (spellInfo->Id == 12042)
-                return SPELL_BUFF_CASTER_POWER;
-
-            break;
-        }
-        case SPELLFAMILY_WARRIOR:
-        {
-            if (spellInfo->SpellFamilyFlags & uint64(0x00008000010000))
-                return SPELL_SHOUT_BUFF;
-
-            break;
-        }
-        case SPELLFAMILY_WARLOCK:
-        {
-            // only warlock curses have this
-            if (spellInfo->Dispel == DISPEL_CURSE)
-                return SPELL_CURSE;
-
-            // Warlock (Demon Armor | Demon Skin | Fel Armor)
-            if (spellInfo->IsFitToFamilyMask(uint64(0x2000002000000000), 0x00000010))
-                return SPELL_WARLOCK_ARMOR;
-
-            // Corruption and Seed of Corruption
-            if (spellInfo->IsFitToFamilyMask(uint64(0x1000000002)))
-                return SPELL_CORRUPTION_DEBUFF;
-
-            // Unstable Affliction | Immolate
-            if (spellInfo->IsFitToFamilyMask(uint64(0x0000010000000004)))
-                return SPELL_UA_IMMOLATE;
-            break;
-        }
-        case SPELLFAMILY_PRIEST:
-        {
-            // Power Infusion:
-            if (spellInfo->Id == 10060)
-                return SPELL_BUFF_CASTER_POWER;
-
-            break;
-        }
-        case SPELLFAMILY_HUNTER:
-        {
-            // only hunter stings have this
-            if (spellInfo->Dispel == DISPEL_POISON)
-                return SPELL_STING;
-
-            // only hunter aspects have this
-            if (spellInfo->IsFitToFamilyMask(uint64(0x0044000000380000), 0x00001010))
-                return SPELL_ASPECT;
-
-            break;
-        }
-        case SPELLFAMILY_PALADIN:
-        {
-            if (IsSealSpell(spellInfo))
-                return SPELL_SEAL;
-
-            if (spellInfo->IsFitToFamilyMask(uint64(0x0000000011010002)))
-                return SPELL_BLESSING;
-
-            if (spellInfo->IsFitToFamilyMask(uint64(0x0000000000002190)))
-                return SPELL_HAND;
-
-            // skip Heart of the Crusader that have also same spell family mask
-            if (spellInfo->IsFitToFamilyMask(uint64(0x00000800180400)) && !spellInfo->IsFitToFamilyMask(uint64(0x20000000), uint64(0x40)))
-                return SPELL_JUDGEMENT;
-
-            // only paladin auras have this (for palaldin class family)
-            if (spellInfo->IsFitToFamilyMask(uint64(0x0000000000000000), 0x00000020))
-                return SPELL_AURA;
-
-            break;
-        }
-        case SPELLFAMILY_SHAMAN:
-        {
-            if (IsElementalShield(spellInfo))
-                return SPELL_ELEMENTAL_SHIELD;
-
-            break;
-        }
-
-        case SPELLFAMILY_POTION:
-            return sSpellMgr.GetSpellElixirSpecific(spellInfo->Id);
-
-        case SPELLFAMILY_DEATHKNIGHT:
-            if (spellInfo->Category == 47)
-                return SPELL_PRESENCE;
-            break;
-    }
-
-    // Tracking spells (exclude Well Fed, some other always allowed cases)
-    if (spellInfo->HasAttribute(SPELL_ATTR_EX6_ALLOW_WHILE_RIDING_VEHICLE) && (IsSpellHaveAura(spellInfo, SPELL_AURA_TRACK_CREATURES) ||
-        IsSpellHaveAura(spellInfo, SPELL_AURA_TRACK_STEALTHED) ||
-        IsSpellHaveAura(spellInfo, SPELL_AURA_TRACK_RESOURCES)))
-        return SPELL_TRACKER;
-
-    // elixirs can have different families, but potion most ofc.
-    if (SpellSpecific sp = sSpellMgr.GetSpellElixirSpecific(spellInfo->Id))
-        return sp;
-
-    return SPELL_NORMAL;
 }
 
 bool IsExplicitPositiveTarget(uint32 targetA)
@@ -2764,8 +2646,7 @@ SpellCastResult SpellMgr::GetSpellAllowedInLocationError(SpellEntry const* spell
             if (!player)
                 return SPELL_FAILED_REQUIRES_AREA;
             BattleGround* bg = player->GetBattleGround();
-            return map_id == 30 && bg
-                   && bg->GetStatus() != STATUS_WAIT_JOIN ? SPELL_CAST_OK : SPELL_FAILED_REQUIRES_AREA;
+            return map_id == 30 && bg && bg->GetStatus() != STATUS_WAIT_JOIN ? SPELL_CAST_OK : SPELL_FAILED_REQUIRES_AREA;
         }
         case 2584:                                          // Waiting to Resurrect
         case 42792:                                         // Recently Dropped Flag
@@ -3112,6 +2993,9 @@ void SpellMgr::CheckUsedSpells(char const* table) const
 
 DiminishingGroup GetDiminishingReturnsGroupForSpell(SpellEntry const* spellproto, bool triggered)
 {
+    if (IsSpellHaveAura(spellproto, SPELL_AURA_MOD_TAUNT))
+        return DIMINISHING_TAUNT;
+
     // Explicit Diminishing Groups
     switch (spellproto->SpellFamilyName)
     {
@@ -3283,7 +3167,7 @@ bool IsDiminishingReturnsGroupDurationDiminished(DiminishingGroup group, bool pv
 //         default:
 //             return true;
 //     }
-    return false;
+    return true;
 }
 
 DiminishingReturnsType GetDiminishingReturnsGroupType(DiminishingGroup group)
@@ -3293,6 +3177,7 @@ DiminishingReturnsType GetDiminishingReturnsGroupType(DiminishingGroup group)
         case DIMINISHING_CYCLONE:
         case DIMINISHING_TRIGGER_STUN:
         case DIMINISHING_CONTROL_STUN:
+        case DIMINISHING_TAUNT:
             return DRTYPE_ALL;
         case DIMINISHING_CONTROL_ROOT:
         case DIMINISHING_TRIGGER_ROOT:

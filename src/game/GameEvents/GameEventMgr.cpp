@@ -947,14 +947,15 @@ void GameEventMgr::GameEventSpawn(int16 event_id)
     if (!dbGuidsToForward.empty())
     {
         // world thread will always have valid pointers to maps
-        sWorld.GetMessager().AddMessage([=](World* world)
+        sWorld.GetMessager().AddMessage([=](World* /*world*/)
         {
             for (auto& data : dbGuidsToForward)
             {
                 sObjectMgr.AddDynGuidForMap(data.first, data.second);
-                sMapMgr.DoForAllMapsWithMapId(data.first, [&](Map* map) // reference pass because executed in place
+                uint32 mapId = data.first;
+                sMapMgr.DoForAllMapsWithMapId(mapId, [dbGuids = data.second](Map* map) // reference pass because executed in place
                 {
-                    map->GetMessager().AddMessage([dbGuids = data.second](Map* map) // double indirection so it executes in map thread
+                    map->GetMessager().AddMessage([dbGuids](Map* map) // double indirection so it executes in map thread
                     {
                         for (uint32 creatureDbGuid : dbGuids.first)
                         {
@@ -1055,14 +1056,14 @@ void GameEventMgr::GameEventUnspawn(int16 event_id)
     if (!dbGuidsToForward.empty())
     {
         // world thread will always have valid pointers to maps
-        sWorld.GetMessager().AddMessage([=](World* world)
+        sWorld.GetMessager().AddMessage([=](World* /*world*/)
         {
             for (auto& data : dbGuidsToForward)
             {
                 sObjectMgr.RemoveDynGuidForMap(data.first, data.second);
-                sMapMgr.DoForAllMapsWithMapId(data.first, [&](Map* map) // reference pass because executed in place
+                sMapMgr.DoForAllMapsWithMapId(data.first, [dbGuids = data.second](Map* map) // reference pass because executed in place
                 {
-                    map->GetMessager().AddMessage([dbGuids = data.second](Map* map) // double indirection so it executes in map thread
+                    map->GetMessager().AddMessage([dbGuids](Map* map) // double indirection so it executes in map thread
                     {
                         for (uint32 creatureDbGuid : dbGuids.first)
                         {
@@ -1139,14 +1140,17 @@ struct GameEventUpdateCreatureDataInMapsWorker
 
     void operator()(Map* map)
     {
-        if (Creature* pCreature = map->GetCreature(i_guid))
+        map->GetMessager().AddMessage([guid = i_guid, data = i_data, activate = i_activate, event_data = i_event_data](Map* map)
         {
-            pCreature->UpdateEntry(i_data->id, i_data, i_activate ? i_event_data : nullptr);
+            if (Creature* pCreature = map->GetCreature(guid))
+            {
+                pCreature->UpdateEntry(data->id, data, activate ? event_data : nullptr);
 
-            // spells not casted for event remove case (sent nullptr into update), do it
-            if (!i_activate)
-                pCreature->ApplyGameEventSpells(i_event_data, false);
-        }
+                // spells not casted for event remove case (sent nullptr into update), do it
+                if (!activate)
+                    pCreature->ApplyGameEventSpells(event_data, false);
+            }
+        });
     }
 
     ObjectGuid i_guid;

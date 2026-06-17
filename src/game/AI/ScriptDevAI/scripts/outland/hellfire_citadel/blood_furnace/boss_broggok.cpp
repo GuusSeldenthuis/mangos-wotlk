@@ -61,16 +61,12 @@ struct boss_broggokAI : public CombatAI
     ScriptedInstance* m_instance;
     bool m_isRegularMode;
 
-    void Aggro(Unit* /*who*/) override
-    {
-        if (m_instance)
-            m_instance->SetData(TYPE_BROGGOK_EVENT, IN_PROGRESS);
-    }
-
     void EnterEvadeMode() override
     {
         if (m_instance)
             m_instance->SetData(TYPE_BROGGOK_EVENT, FAIL);
+
+        CombatAI::EnterEvadeMode();
     }
 
     void JustSummoned(Creature* summoned) override
@@ -81,6 +77,7 @@ struct boss_broggokAI : public CombatAI
             summoned->AI()->SetReactState(REACT_DEFENSIVE);
             summoned->AI()->SetCombatMovement(false);
             summoned->AI()->SetMeleeEnabled(false);
+            summoned->SetCanCallForAssistance(false);
             summoned->SetInCombatWithZone();
         }
         else
@@ -137,7 +134,7 @@ struct npc_fel_orc : public CombatAI
         CombatAI::JustReachedHome();
          // Only Event Envolved NPCs should trigger fail condition
         if (m_creature->HasStringId(FIRST_BROGGOK_CELL_STRING) || m_creature->HasStringId(SECOND_BROGGOK_CELL_STRING) || m_creature->HasStringId(THIRD_BROGGOK_CELL_STRING) || m_creature->HasStringId(FOURTH_BROGGOK_CELL_STRING))
-            if (m_instance->GetData(TYPE_BROGGOK_EVENT == IN_PROGRESS))
+            if (m_instance->GetData(TYPE_BROGGOK_EVENT) == IN_PROGRESS)
                 m_instance->SetData(TYPE_BROGGOK_EVENT, FAIL);
     }
 };

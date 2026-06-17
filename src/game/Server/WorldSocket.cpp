@@ -118,12 +118,12 @@ std::deque<uint32> WorldSocket::GetIncOpcodeHistory()
     return m_opcodeHistoryInc;
 }
 
-WorldSocket::WorldSocket(boost::asio::io_service& service) : AsyncSocket(service), m_lastPingTime(std::chrono::system_clock::time_point::min()), m_overSpeedPings(0),
+WorldSocket::WorldSocket(boost::asio::io_context& context) : AsyncSocket(context), m_lastPingTime(std::chrono::system_clock::time_point::min()), m_overSpeedPings(0),
     m_session(nullptr), m_seed(urand()), m_loggingPackets(false)
 {
 }
 
-void WorldSocket::SendPacket(const WorldPacket& pct, bool immediate)
+void WorldSocket::SendPacket(const WorldPacket& pct)
 {
     if (IsClosed())
         return;
@@ -153,13 +153,13 @@ void WorldSocket::SendPacket(const WorldPacket& pct, bool immediate)
         std::memcpy(fullMessage->data(), header.data(), header.headerSize()); // copy header
         std::memcpy((fullMessage->data() + header.headerSize()), reinterpret_cast<const char*>(pct.contents()), pct.size()); // copy packet
         auto self(shared_from_this());
-        Write(fullMessage->data(), fullMessage->size(), [self, fullMessage](const boost::system::error_code& error, std::size_t read) {});
+        Write(fullMessage->data(), fullMessage->size(), [self, fullMessage](const boost::system::error_code& /*error*/, std::size_t /*written*/) {});
     }
     else
     {
         std::shared_ptr<ServerPktHeader> sharedHeader = std::make_shared<ServerPktHeader>(header);
         auto self(shared_from_this());
-        Write(sharedHeader->data(), sharedHeader->headerSize(), [self, sharedHeader](const boost::system::error_code& error, std::size_t read) {});
+        Write(sharedHeader->data(), sharedHeader->headerSize(), [self, sharedHeader](const boost::system::error_code& /*error*/, std::size_t /*written*/) {});
     }
 }
 
@@ -188,7 +188,7 @@ bool WorldSocket::ProcessIncomingData()
     std::shared_ptr<ClientPktHeader> header = std::make_shared<ClientPktHeader>();
 
     auto self(shared_from_this());
-    Read((char*)header.get(), sizeof(ClientPktHeader), [self, header](const boost::system::error_code& error, std::size_t read) -> void
+    Read((char*)header.get(), sizeof(ClientPktHeader), [self, header](const boost::system::error_code& error, std::size_t /*read*/) -> void
     {
         if (error)
         {
@@ -213,7 +213,7 @@ bool WorldSocket::ProcessIncomingData()
         size_t packetSize = header->size - 4;
         std::shared_ptr<std::vector<uint8>> packetBuffer = std::make_shared<std::vector<uint8>>(packetSize);
 
-        self->Read(reinterpret_cast<char*>(packetBuffer->data()), packetBuffer->size(), [self, packetBuffer, opcode = opcode](const boost::system::error_code& error, std::size_t read) -> void
+        self->Read(reinterpret_cast<char*>(packetBuffer->data()), packetBuffer->size(), [self, packetBuffer, opcode = opcode](const boost::system::error_code& error, std::size_t /*read*/) -> void
         {
             if (error)
             {
@@ -534,7 +534,7 @@ bool WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     static SqlStatementID updAccount;
 
     SqlStatement stmt = LoginDatabase.CreateStatement(updAccount, "INSERT INTO account_logons(accountId,ip,loginTime,loginSource) VALUES(?,?," _NOW_ ",?)");
-    stmt.PExecute(id, address.c_str(), std::to_string(LOGIN_TYPE_MANGOSD).c_str());
+    stmt.PExecute(id, address.c_str(), std::to_string(realmID).c_str());
 
     m_crypt.Init(&K);
 
@@ -570,8 +570,6 @@ bool WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
             session->SetPlatform(clientPlatform);
 
             std::unique_ptr<SessionAnticheatInterface> anticheat = sAnticheatLib->NewSession(session, K);
-
-            session->SendAuthOk();
 
             // when false, the client sent invalid addon data.  kick!
             WorldPacket addonPacket; // yes its copypasted atm cos of reconnect
@@ -618,8 +616,6 @@ bool WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
         m_session->SetOS(clientOS);
         m_session->SetPlatform(clientPlatform);
         m_session->InitializeAnticheat(K);
-
-        m_session->SendAuthOk();
 
         // when false, the client sent invalid addon data.  kick!
         WorldPacket addonPacket;
@@ -695,7 +691,7 @@ bool WorldSocket::HandlePing(WorldPacket& recvPacket)
 
     WorldPacket packet(SMSG_PONG, 4);
     packet << ping;
-    SendPacket(packet, true);
+    SendPacket(packet);
 
     return true;
 }

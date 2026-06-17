@@ -49,69 +49,44 @@ EndContentData */
 
 enum
 {
-    SAY_FREE                        = -1000139,
-
-    FACTION_HOSTILE                 = 16,
     FACTION_FRIENDLY                = 35,
-
-    SPELL_ENVELOPING_WINDS          = 15535,
-    SPELL_SHOCK                     = 12553,
+    AERANAS_RELAY_SCRIPT            = 17086,
 };
 
-struct npc_aeranasAI : public ScriptedAI
+enum AeranasActions
 {
-    npc_aeranasAI(Creature* pCreature) : ScriptedAI(pCreature) { Reset(); }
-
-    uint32 m_uiEnvelopingWindsTimer;
-    uint32 m_uiShockTimer;
-
-    void Reset() override
-    {
-        m_uiEnvelopingWindsTimer = 9000;
-        m_uiShockTimer           = 5000;
-
-        m_creature->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-    }
-
-    void UpdateAI(const uint32 uiDiff) override
-    {
-
-        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
-            return;
-
-        if (m_creature->GetHealthPercent() < 30.0f)
-        {
-            m_creature->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-            m_creature->RemoveAllAuras();
-            m_creature->CombatStop(true);
-            DoScriptText(SAY_FREE, m_creature);
-            return;
-        }
-
-        if (m_uiShockTimer < uiDiff)
-        {
-            DoCastSpellIfCan(m_creature->GetVictim(), SPELL_SHOCK);
-            m_uiShockTimer = 10000;
-        }
-        else
-            m_uiShockTimer -= uiDiff;
-
-        if (m_uiEnvelopingWindsTimer < uiDiff)
-        {
-            DoCastSpellIfCan(m_creature->GetVictim(), SPELL_ENVELOPING_WINDS);
-            m_uiEnvelopingWindsTimer = 25000;
-        }
-        else
-            m_uiEnvelopingWindsTimer -= uiDiff;
-
-        DoMeleeAttackIfReady();
-    }
+    AERANAS_PHASE_1,
+    AERANAS_ACTION_MAX,
 };
 
-UnitAI* GetAI_npc_aeranas(Creature* pCreature)
+struct npc_aeranasAI : public CombatAI
 {
-    return new npc_aeranasAI(pCreature);
-}
+    npc_aeranasAI(Creature* creature) : CombatAI(creature, AERANAS_ACTION_MAX)
+    {
+        AddTimerlessCombatAction(AERANAS_PHASE_1, true);
+        Reset(); 
+    }
+
+    void ExecuteAction(uint32 action) override
+    {
+        switch (action)
+        {
+            case AERANAS_PHASE_1:
+            {
+                if (m_creature->GetHealthPercent() < 30.0f) 
+                {
+                    m_creature->GetMap()->ScriptsStart(SCRIPT_TYPE_RELAY, AERANAS_RELAY_SCRIPT, m_creature, m_creature);
+                    m_creature->setFaction(FACTION_FRIENDLY);
+                    m_creature->RemoveAllAuras();
+                    m_creature->CombatStop(true);
+                    DisableCombatAction(action);
+                }
+                break;
+            }
+        }
+    }    
+};
+
 
 /*######
 ## npc_ancestral_wolf
@@ -542,23 +517,15 @@ UnitAI* GetAI_npc_fel_guard_hound(Creature* pCreature)
     return new npc_fel_guard_houndAI(pCreature);
 }
 
-bool EffectDummyCreature_npc_fel_guard_hound(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+// 37689 - Tell dog I just died!
+struct TellDogIJustDied : public SpellScript
 {
-    // always check spellid and effectindex
-    if (uiSpellId == SPELL_INFORM_DOG && uiEffIndex == EFFECT_INDEX_0)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        if (pCaster->GetEntry() == NPC_DERANGED_HELBOAR)
-        {
-            if (npc_fel_guard_houndAI* pHoundAI = dynamic_cast<npc_fel_guard_houndAI*>(pCreatureTarget->AI()))
-                pHoundAI->DoMoveToCorpse(pCaster);
-        }
-
-        // always return true when we are handling this spell and effect
-        return true;
+        if (npc_fel_guard_houndAI* houndAI = dynamic_cast<npc_fel_guard_houndAI*>(spell->GetUnitTarget()->AI()))
+            houndAI->DoMoveToCorpse(spell->GetCaster());
     }
-
-    return false;
-}
+};
 
 /*######
 ## npc_anchorite_barada
@@ -2362,7 +2329,7 @@ struct npc_razorthorn_ravager : public CombatAI
 
     }
 
-    bool CanHandleCharm() override { return true; }
+    bool CanHandleCharm() const override { return true; }
 
     void JustGotCharmed(Unit* /*charmer*/) override
     {
@@ -2396,11 +2363,107 @@ struct CharmRavager : public AuraScript
     }
 };
 
+enum
+{
+    // quest 9447
+    SPELL_HEALING_SALVE                 = 29314,
+    SPELL_HEALING_SALVE_DUMMY           = 29319,
+    NPC_MAGHAR_GRUNT                    = 16846,
+    NPC_DEBILITATED_MAGHAR_GRUNT        = 16847,
+};
+
+// 29314 - Quest - Healing Salve
+struct QuestHealingSalve : public SpellScript, public AuraScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetEntry() != NPC_DEBILITATED_MAGHAR_GRUNT)
+            return SPELL_FAILED_BAD_TARGETS;
+        return SPELL_CAST_OK;
+    }
+
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (!apply)
+            return;
+
+        if (Unit* caster = aura->GetCaster())
+            caster->CastSpell(aura->GetTarget(), SPELL_HEALING_SALVE_DUMMY, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 29319 - Quest - Healing Salve Dummy
+struct QuestHealingSalveDummy : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply || !aura->GetTarget()->IsCreature())
+            return;
+
+        Creature* creature = static_cast<Creature*>(aura->GetTarget());
+
+        creature->UpdateEntry(NPC_MAGHAR_GRUNT);
+
+        if (creature->getStandState() == UNIT_STAND_STATE_KNEEL)
+            creature->SetStandState(UNIT_STAND_STATE_STAND);
+
+        creature->ForcedDespawn(60 * IN_MILLISECONDS);
+    }
+};
+
+enum
+{
+    NPC_HELBOAR                         = 16880,
+    NPC_DREADTUSK                       = 16992,
+};
+
+// 34665 - Administer Antidote
+struct AdministerAntidote : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        Unit* target = spell->GetUnitTarget();
+        if (effIdx == EFFECT_INDEX_0)
+        {
+            if (target->GetEntry() != NPC_HELBOAR)
+                return;
+
+            // possible needs check for quest state, to not have any effect when quest really complete
+            static_cast<Creature*>(target)->UpdateEntry(NPC_DREADTUSK);
+        }
+    }
+};
+
+enum
+{
+    NPC_FELBLOOD_INITIATE   = 24918,
+    NPC_EMACIATED_FELBLOOD  = 24955,
+};
+
+// 44936 - Quest - Fel Siphon Dummy
+struct QuestFelSiphonDummy : public SpellScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetEntry() != NPC_FELBLOOD_INITIATE)
+            return SPELL_FAILED_BAD_TARGETS;
+
+        return SPELL_CAST_OK;
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
+    {
+        static_cast<Creature*>(spell->GetUnitTarget())->UpdateEntry(NPC_EMACIATED_FELBLOOD);
+    }
+};
+
 void AddSC_hellfire_peninsula()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "npc_aeranas";
-    pNewScript->GetAI = &GetAI_npc_aeranas;
+    pNewScript->GetAI = &GetNewAIInstance<npc_aeranasAI>;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -2424,7 +2487,6 @@ void AddSC_hellfire_peninsula()
     pNewScript = new Script;
     pNewScript->Name = "npc_fel_guard_hound";
     pNewScript->GetAI = &GetAI_npc_fel_guard_hound;
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_npc_fel_guard_hound;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -2503,6 +2565,7 @@ void AddSC_hellfire_peninsula()
     pNewScript->GetAI = &GetNewAIInstance<npc_razorthorn_ravager>;
     pNewScript->RegisterSelf();
 
+    RegisterSpellScript<TellDogIJustDied>("spell_tell_dog_i_just_died");
     RegisterSpellScript<SummonSmokeBeacon>("spell_summon_smoke_beacon");
     RegisterSpellScript<CursedScarabPeriodicTrigger>("spell_cursed_scarab_periodic");
     RegisterSpellScript<CursedScarabDespawnPeriodicTrigger>("spell_cursed_scarab_despawn_periodic");
@@ -2512,4 +2575,8 @@ void AddSC_hellfire_peninsula()
     RegisterSpellScript<LivingFlareMaster>("spell_living_flare_master");
     RegisterSpellScript<LivingFlareUnstable>("spell_living_flare_unstable");
     RegisterSpellScript<DemoniacVisitation>("spell_demoniac_visitation");
+    RegisterSpellScript<QuestHealingSalve>("spell_quest_healing_salve");
+    RegisterSpellScript<QuestHealingSalveDummy>("spell_quest_healing_salve_dummy");
+    RegisterSpellScript<AdministerAntidote>("spell_administer_antidote");
+    RegisterSpellScript<QuestFelSiphonDummy>("spell_quest_fel_siphon_dummy");
 }

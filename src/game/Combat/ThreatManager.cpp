@@ -316,7 +316,7 @@ void ThreatContainer::update(bool force, bool isPlayer)
                 bool first = owner->CanReachWithMeleeAttack(lhs->getTarget());
                 bool second = owner->CanReachWithMeleeAttack(rhs->getTarget());
                 if (first != second)
-                    return first > second;
+                    return first;
             }
             if (lhs->GetHostileState() != rhs->GetHostileState())
                 return lhs->GetHostileState() > rhs->GetHostileState();
@@ -334,8 +334,6 @@ HostileReference* ThreatContainer::selectNextVictim(Unit* attacker, HostileRefer
 {
     HostileReference* currentRef = nullptr;
     bool found = false;
-    bool onlySecondChoiceTargetsFound = false;
-    bool checkedCurrentVictim = false;
     bool suppressRanged = attacker->IsIgnoringRangedTargets();
     bool currentVictimInMelee = true;
     if (suppressRanged && currentVictim)
@@ -470,12 +468,14 @@ void ThreatManager::addThreat(Unit* victim, float threat, bool crit, SpellSchool
 
     float calculatedThreat = ThreatCalcHelper::CalcThreat(victim, iOwner, threat, crit, schoolMask, threatSpell, assist);
 
-    if (calculatedThreat > 0.0f)
+    if (calculatedThreat > 0.0f && !iOwner->IsIgnoringMisdirection())
     {
         float totalMod = 0.f;
         auto& redirectionData = victim->getHostileRefManager().GetThreatRedirectionData();
         for (auto& redirection : redirectionData)
         {
+            if (getOwner()->IsIgnoringMisdirect())
+                break;
             float redirectedMod = redirection.second.mod;
             Unit* redirectedTarget = iOwner->GetMap()->GetUnit(redirection.second.target);
             if (!redirectedTarget)

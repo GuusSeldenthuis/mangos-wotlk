@@ -33,14 +33,23 @@ void VisibleChangesNotifier::Visit(CameraMapType& m)
 {
     for (auto& iter : m)
     {
-        iter.getSource()->UpdateVisibilityOf(&i_object);
+        if (iter.getSource()->IsSendInProgress() || iter.getSource()->GetOwner()->HasAtClient(&i_object))
+            continue;
+        UpdateData data;
+        iter.getSource()->UpdateVisibilityOf(&i_object, data);
         m_unvisitedGuids.erase(iter.getSource()->GetOwner()->GetObjectGuid());
+        data.SendData(*iter.getSource()->GetOwner()->GetSession());
     }
 }
 
 void VisibleNotifier::Notify()
 {
     Player& player = *i_camera.GetOwner();
+#ifdef ENABLE_PLAYERBOTS
+    if (!player.isRealPlayer())
+        return;
+#endif
+
     // at this moment i_clientGUIDs have guids that not iterate at grid level checks
     // but exist one case when this possible and object not out of range: transports
     if (GenericTransport* transport = player.GetTransport())
@@ -51,7 +60,11 @@ void VisibleNotifier::Notify()
             {
                 // ignore far sight case
                 if (itr->IsPlayer())
-                    static_cast<Player*>(itr)->UpdateVisibilityOf(static_cast<Player*>(itr), &player);
+                {
+                    UpdateData data;
+                    static_cast<Player*>(itr)->UpdateVisibilityOf(static_cast<Player*>(itr), &player, data);
+                    data.SendData(*static_cast<Player*>(itr)->GetSession());
+                }
                 player.UpdateVisibilityOf(&player, itr, i_data, i_visibleNow);
                 i_clientGUIDs.erase(itr->GetObjectGuid());
             }
@@ -67,7 +80,7 @@ void VisibleNotifier::Notify()
             if (!obj->GetVisibilityData().IsVisibilityOverridden())
                 continue;
 
-            player.UpdateVisibilityOf(&player, obj);
+            player.UpdateVisibilityOf(&player, obj, i_data);
             i_clientGUIDs.erase(current);
         }
     }
@@ -80,6 +93,12 @@ void VisibleNotifier::Notify()
             continue;
         }
         ++itr;
+    }
+
+    if (player.IsPendingPhaseChange())
+    {
+        player.GetMap()->UpdateInfinite(player, i_data, i_clientGUIDs, i_visibleNow);
+        player.RemovePendingPhaseChange();
     }
 
     // generate outOfRange for not iterate objects
@@ -103,33 +122,26 @@ void VisibleNotifier::Notify()
     if (i_data.HasData())
     {
         // send create/outofrange packet to player (except player create updates that already sent using SendUpdateToPlayer)
-        for (size_t i = 0; i < i_data.GetPacketCount(); ++i)
-        {
-            WorldPacket packet = i_data.BuildPacket(i);
-            player.GetSession()->SendPacket(packet);
-        }
-
-        // send out of range to other players if need
-        GuidSet const& oor = i_data.GetOutOfRangeGUIDs();
-        for (auto iter : oor)
-        {
-            if (!iter.IsPlayer())
-                continue;
-
-            if (Player* plr = ObjectAccessor::FindPlayer(iter))
-                plr->UpdateVisibilityOf(plr->GetCamera().GetBody(), &player);
-        }
+        if (i_processSend)
+            i_data.SendData(*player.GetSession());
     }
 
     // Now do operations that required done at object visibility change to visible
 
     // send data at target visibility change (adding to client)
-    for (auto vItr : i_visibleNow)
+    if (i_processSend)
     {
-        // target aura duration for caster show only if target exist at caster client
-        if (vItr != &player && vItr->isType(TYPEMASK_UNIT))
-            player.SendAurasForTarget((Unit*)vItr);
+        for (auto vItr : i_visibleNow)
+        {
+            // target aura duration for caster show only if target exist at caster client
+            if (vItr != &player && vItr->isType(TYPEMASK_UNIT))
+                player.SendAurasForTarget((Unit*)vItr);
+        }
     }
+    else
+        for (auto vItr : i_visibleNow)
+            if (vItr != &player && vItr->isType(TYPEMASK_UNIT))
+                i_data.AddAfterCreatePacket(Player::BuildAurasForTarget(static_cast<Unit const*>(vItr)));
 }
 
 void MessageDeliverer::Visit(CameraMapType& m)
@@ -222,7 +234,7 @@ void SpellMessageDestLocDeliverer::Visit(CameraMapType& m)
 
         if (WorldSession* session = player->GetSession())
         {
-            session->SendPacket(i_message);
+            session->SendPacket(i_accumulate ? i_spellMessage : i_destLoc);
             if (i_accumulate)
                 i_guids.insert(player->GetObjectGuid());
         }
@@ -270,7 +282,7 @@ void MaNGOS::RespawnDo::operator()(Creature* u) const
     Map* map = u->GetMap();
     if (map->IsBattleGroundOrArena())
     {
-        BattleGroundEventIdx eventId = sBattleGroundMgr.GetCreatureEventIndex(u->GetDbGuid());
+        BattleGroundEventIdx eventId = map->GetMapDataContainer().GetCreatureEventIndex(u->GetDbGuid());
         if (!((BattleGroundMap*)map)->GetBG()->IsActiveEvent(eventId.event1, eventId.event2))
             return;
     }
@@ -295,8 +307,8 @@ void MaNGOS::RespawnDo::operator()(GameObject* u) const
     Map* map = u->GetMap();
     if (map->IsBattleGroundOrArena())
     {
-        BattleGroundEventIdx eventId = sBattleGroundMgr.GetGameObjectEventIndex(u->GetDbGuid());
-        if (!((BattleGroundMap*)map)->GetBG()->IsActiveEvent(eventId.event1, eventId.event2))
+        BattleGroundEventIdx eventId = map->GetMapDataContainer().GetGameObjectEventIndex(u->GetDbGuid());
+        if (!static_cast<BattleGroundMap*>(map)->GetBG()->IsActiveEvent(eventId.event1, eventId.event2))
             return;
     }
 

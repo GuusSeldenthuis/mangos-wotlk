@@ -801,6 +801,13 @@ class ChatHandler
         bool HandlePlayerbotCommand(char* args);
 #endif
 
+#ifdef ENABLE_PLAYERBOTS
+        bool HandlePlayerbotCommand(char* args);
+        bool HandleRandomPlayerbotCommand(char* args);
+        bool HandleAhBotCommand(char* args);
+        bool HandlePerfMonCommand(char* args);
+#endif
+
         bool HandleArenaFlushPointsCommand(char* args);
         bool HandleArenaSeasonRewardsCommand(char* args);
         bool HandleArenaDataReset(char* args);
@@ -856,7 +863,7 @@ class ChatHandler
 
         // Utility methods for commands
         bool ShowAccountListHelper(std::unique_ptr<QueryResult> queryResult, uint32* limit = nullptr, bool title = true, bool error = true);
-        void ShowAchievementListHelper(AchievementEntry const* achEntry, LocaleConstant loc, time_t const* date = nullptr, Player* target = nullptr);
+        void ShowAchievementListHelper(AchievementEntry const* achEntry, LocaleConstant loc, TimePoint const* updateDate = nullptr, Player* target = nullptr);
         void ShowAchievementCriteriaListHelper(AchievementCriteriaEntry const* criEntry, AchievementEntry const* achEntry, LocaleConstant loc, Player* target = nullptr);
         void ShowFactionListHelper(FactionEntry const* factionEntry, LocaleConstant loc, FactionState const* repState = nullptr, Player* target = nullptr);
         void ShowItemListHelper(uint32 itemId, int loc_idx, Player* target = nullptr);
@@ -903,7 +910,6 @@ class ChatHandler
 
         typedef std::list<DeletedInfo> DeletedInfoList;
         bool GetDeletedCharacterInfoList(DeletedInfoList& foundList, std::string searchString = "");
-        std::string GenerateDeletedCharacterGUIDsWhereStr(DeletedInfoList::const_iterator& itr, DeletedInfoList::const_iterator const& itr_end);
         void HandleCharacterDeletedListHelper(DeletedInfoList const& foundList);
         void HandleCharacterDeletedRestoreHelper(DeletedInfo const& delInfo);
 

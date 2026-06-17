@@ -26,58 +26,67 @@
 
 #include <map>
 #include <memory>
+#include <string>
 
 struct AchievementEntry;
 struct AchievementCriteriaEntry;
 
-typedef std::list<AchievementCriteriaEntry const*> AchievementCriteriaEntryList;
-typedef std::list<AchievementEntry const*>         AchievementEntryList;
+typedef std::vector<AchievementCriteriaEntry const*> AchievementCriteriaEntryVector;
+typedef std::list<AchievementEntry const*>           AchievementEntryList;
 
-typedef std::map<uint32, AchievementCriteriaEntryList> AchievementCriteriaListByAchievement;
+typedef std::map<uint32, AchievementCriteriaEntryVector> AchievementCriteriaListByAchievement;
 typedef std::map<uint32, AchievementEntryList>         AchievementListByReferencedId;
-typedef std::map<uint32, time_t>                       AchievementCriteriaFailTimeMap;
+typedef std::map<uint32, TimePoint>                    AchievementCriteriaFailTimeMap;
 
 struct CriteriaProgress
 {
-    time_t date;
+    TimePoint updateDate;
+    TimePoint startDate;
     uint32 counter;
     bool changed;
-    bool timedCriteriaFailed;
+    bool criteriaFailed;
 };
 
 enum AchievementCriteriaRequirementType
 {
     // value1         value2        comment
-    ACHIEVEMENT_CRITERIA_REQUIRE_NONE                = 0,   // 0              0
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_CREATURE          = 1,   // creature_id    0
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_CLASS_RACE = 2,   // class_id       race_id
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_LESS_HEALTH = 3,  // health_percent 0
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_DEAD       = 4,   // own_team       0             not corpse (not released body), own_team==false if enemy team expected
-    ACHIEVEMENT_CRITERIA_REQUIRE_S_AURA              = 5,   // spell_id       effect_idx
-    ACHIEVEMENT_CRITERIA_REQUIRE_S_AREA              = 6,   // area id        0
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_AURA              = 7,   // spell_id       effect_idx
-    ACHIEVEMENT_CRITERIA_REQUIRE_VALUE               = 8,   // minvalue                     value provided with achievement update must be not less that limit
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_LEVEL             = 9,   // minlevel                     minlevel of target
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_GENDER            = 10,  // gender                       0=male; 1=female
-    ACHIEVEMENT_CRITERIA_REQUIRE_DISABLED            = 11,  //                              used to prevent achievement creteria complete if not all requirement implemented and listed in table
-    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_DIFFICULTY      = 12,  // difficulty                   normal/heroic difficulty for current event map
-    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_PLAYER_COUNT    = 13,  // count                        "with less than %u people in the zone"
-    ACHIEVEMENT_CRITERIA_REQUIRE_T_TEAM              = 14,  // team                         HORDE(67), ALLIANCE(469)
-    ACHIEVEMENT_CRITERIA_REQUIRE_S_DRUNK             = 15,  // drunken_state  0             (enum DrunkenState) of player
-    ACHIEVEMENT_CRITERIA_REQUIRE_HOLIDAY             = 16,  // holiday_id     0             event in holiday time
-    ACHIEVEMENT_CRITERIA_REQUIRE_UNUSED              = 17,  //
-    ACHIEVEMENT_CRITERIA_REQUIRE_INSTANCE_SCRIPT     = 18,  // 0              0             maker instance script call for check current criteria requirements fit
-    ACHIEVEMENT_CRITERIA_REQUIRE_S_EQUIPPED_ITEM_LVL = 19,  // item_level     item_quality  fir equipped item in slot `misc1` to item level and quality
-    ACHIEVEMENT_CRITERIA_REQUIRE_NTH_BIRTHDAY        = 20,  // N                            login on day of N-th Birthday
-    ACHIEVEMENT_CRITERIA_REQUIRE_KNOWN_TITLE         = 21,  // title_id                     known (pvp) title, values from dbc
-    ACHIEVEMENT_CRITERIA_REQUIRE_PVP_SCRIPT          = 22,  // 0              0             maker battleground or outdoor pvp script call for check current criteria requirements fit
-    ACHIEVEMENT_CRITERIA_REQUIRE_KILL_CREATURE_TYPE  = 23,  // creatureType
-    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_ID              = 24,  // mapId                        player must be in map
-    ACHIEVEMENT_CRITERIA_REQUIRE_WORLDSTATE_CONDITION= 25,  // condition_entry              player must be in map
+    ACHIEVEMENT_CRITERIA_REQUIRE_NONE                   = 0,   // 0              0
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_CREATURE             = 1,   // creature_id    0
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_CLASS_RACE    = 2,   // class_id       race_id
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_LESS_HEALTH   = 3,   // health_percent 0
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_PLAYER_DEAD          = 4,   // own_team       0             not corpse (not released body), own_team==false if enemy team expected
+    ACHIEVEMENT_CRITERIA_REQUIRE_S_AURA                 = 5,   // spell_id       effect_idx
+    ACHIEVEMENT_CRITERIA_REQUIRE_S_AREA                 = 6,   // area id        0
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_AURA                 = 7,   // spell_id       effect_idx
+    ACHIEVEMENT_CRITERIA_REQUIRE_VALUE                  = 8,   // minvalue                     value provided with achievement update must be not less that limit
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_LEVEL                = 9,   // minlevel                     minlevel of target
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_GENDER               = 10,  // gender                       0=male; 1=female
+    ACHIEVEMENT_CRITERIA_REQUIRE_SCRIPT                 = 11,  //                              custom script
+    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_DIFFICULTY         = 12,  // difficulty                   normal/heroic difficulty for current event map
+    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_PLAYER_COUNT       = 13,  // count                        "with less than %u people in the zone"
+    ACHIEVEMENT_CRITERIA_REQUIRE_T_TEAM                 = 14,  // team                         HORDE(67), ALLIANCE(469)
+    ACHIEVEMENT_CRITERIA_REQUIRE_S_DRUNK                = 15,  // drunken_state  0             (enum DrunkenState) of player
+    ACHIEVEMENT_CRITERIA_REQUIRE_HOLIDAY                = 16,  // holiday_id     0             event in holiday time
+    ACHIEVEMENT_CRITERIA_REQUIRE_UNUSED                 = 17,  //
+    ACHIEVEMENT_CRITERIA_REQUIRE_INSTANCE_SCRIPT        = 18,  // 0              0             maker instance script call for check current criteria requirements fit
+    ACHIEVEMENT_CRITERIA_REQUIRE_S_EQUIPPED_ITEM_LVL    = 19,  // item_level     item_quality  fir equipped item in slot `misc1` to item level and quality
+    ACHIEVEMENT_CRITERIA_REQUIRE_NTH_BIRTHDAY           = 20,  // N                            login on day of N-th Birthday
+    ACHIEVEMENT_CRITERIA_REQUIRE_KNOWN_TITLE            = 21,  // title_id                     known (pvp) title, values from dbc
+    ACHIEVEMENT_CRITERIA_REQUIRE_PVP_SCRIPT             = 22,  // 0              0             maker battleground or outdoor pvp script call for check current criteria requirements fit
+    ACHIEVEMENT_CRITERIA_REQUIRE_KILL_CREATURE_TYPE     = 23,  // creatureType
+    ACHIEVEMENT_CRITERIA_REQUIRE_MAP_ID                 = 24,  // mapId                        player must be in map
+    ACHIEVEMENT_CRITERIA_REQUIRE_WORLDSTATE_CONDITION   = 25,  // condition_entry              player must be in map
+    ACHIEVEMENT_CRITERIA_REQUIRE_WORLDSTATE_EXPRESSION  = 26,  // worldstate_expression
+    ACHIEVEMENT_CRITERIA_REQUIRE_DISABLED               = 27,  //                              used to prevent achievement creteria complete if not all requirement implemented and listed in table
 };
 
 class Player;
 class Unit;
+
+struct AchievementCriteriaScript
+{
+    virtual bool OnCriteriaCheck(Player const* source, Unit const* target) const = 0;
+};
 
 struct AchievementCriteriaRequirement
 {
@@ -133,7 +142,7 @@ struct AchievementCriteriaRequirement
         {
             uint32 gender;
         } gender;
-        // ACHIEVEMENT_CRITERIA_REQUIRE_DISABLED          = 11 (no data)
+        // ACHIEVEMENT_CRITERIA_REQUIRE_SCRIPT            = 11 (no data)
         // ACHIEVEMENT_CRITERIA_REQUIRE_MAP_DIFFICULTY    = 12
         struct
         {
@@ -198,6 +207,12 @@ struct AchievementCriteriaRequirement
         {
             uint32 conditionEntry;
         } worldStateCondition;
+        // ACHIEVEMENT_CRITERIA_REQUIRE_WORLDSTATE_EXPRESSION = 26
+        struct
+        {
+            uint32 expressionEntry;
+        } worldStateExpression;
+        // ACHIEVEMENT_CRITERIA_REQUIRE_DISABLED             = 27 (no data)
         // ...
         struct
         {
@@ -262,7 +277,7 @@ typedef std::pair<AchievementRewardLocalesMap::const_iterator, AchievementReward
 
 struct CompletedAchievementData
 {
-    time_t date;
+    TimePoint updateDate;
     bool changed;
 };
 
@@ -283,8 +298,9 @@ class AchievementMgr
         static void DeleteFromDB(ObjectGuid guid);
         void LoadFromDB(std::unique_ptr<QueryResult> achievementResult, std::unique_ptr<QueryResult> criteriaResult);
         void SaveToDB();
-        void ResetAchievementCriteria(AchievementCriteriaTypes type, uint32 miscvalue1 = 0, uint32 miscvalue2 = 0);
-        void StartTimedAchievementCriteria(AchievementCriteriaTypes type, uint32 timedRequirementId, time_t startTime = 0);
+        void StartAchievementCriteria(CriteriaStartEvent startEvent, uint32 startAsset = 0);
+        void FailAchievementCriteria(CriteriaFailEvent failEvent, uint32 failAsset = 0);
+        void StartTimedAchievementCriteria(CriteriaTimedEvent timedEvent, uint32 timedAsset);
         void DoFailedTimedAchievementCriterias();
         void UpdateAchievementCriteria(AchievementCriteriaTypes type, uint32 miscvalue1 = 0, uint32 miscvalue2 = 0, Unit* unit = nullptr, uint32 time = 0);
         void CheckAllAchievementCriteria();
@@ -308,11 +324,11 @@ class AchievementMgr
         static uint32 GetCriteriaProgressMaxCounter(AchievementCriteriaEntry const* achievementCriteria, AchievementEntry const* achievement);
 
         // Use PROGRESS_SET only for reset/downgrade criteria progress
-        enum ProgressType { PROGRESS_SET, PROGRESS_ACCUMULATE, PROGRESS_HIGHEST };
+        enum ProgressType { PROGRESS_SET, PROGRESS_ACCUMULATE, PROGRESS_HIGHEST, PROGRESS_FAIL };
         void SetCriteriaProgress(AchievementCriteriaEntry const* criteria, AchievementEntry const* achievement, uint32 changeValue, ProgressType ptype);
 
     private:
-        void SendAchievementEarned(AchievementEntry const* achievement) const;
+        void SendAchievementEarned(AchievementEntry const* achievement, TimePoint time) const;
         void SendCriteriaUpdate(uint32 id, CriteriaProgress const* progress) const;
         void CompletedCriteriaFor(AchievementEntry const* achievement);
         void CompletedAchievement(AchievementEntry const* achievement);
@@ -329,8 +345,13 @@ class AchievementMgr
 class AchievementGlobalMgr
 {
     public:
-        AchievementCriteriaEntryList const& GetAchievementCriteriaByType(AchievementCriteriaTypes type) const;
-        AchievementCriteriaEntryList const* GetAchievementCriteriaByAchievement(uint32 id);
+        ~AchievementGlobalMgr();
+
+        AchievementCriteriaEntryVector const& GetAchievementCriteriaByType(AchievementCriteriaTypes type) const;
+        AchievementCriteriaEntryVector const& GetAchievementCriteriaByFailEvent(CriteriaFailEvent failEvent) const;
+        AchievementCriteriaEntryVector const& GetAchievementCriteriaByStartEvent(CriteriaStartEvent startEvent) const;
+        AchievementCriteriaEntryVector const& GetAchievementCriteriaByTimedEvent(CriteriaTimedEvent timedEvent) const;
+        AchievementCriteriaEntryVector const* GetAchievementCriteriaByAchievement(uint32 id);
         AchievementEntryList const* GetAchievementByReferencedId(uint32 id) const;
         AchievementReward const* GetAchievementReward(AchievementEntry const* achievement, uint8 gender) const;
         AchievementRewardLocale const* GetAchievementRewardLocale(AchievementEntry const* achievement, uint8 gender) const;
@@ -346,21 +367,38 @@ class AchievementGlobalMgr
         void LoadRewards();
         void LoadRewardLocales();
 
+        template <typename T>
+        void RegisterAchievementCriteriaScript(std::string scriptName)
+        {
+            m_criteriaScriptByString.emplace(scriptName, new T());
+        }
+
+        void AssignAchievementCriteriaScripts();
+
+        bool OnCriteriaCheck(uint32 criteriaId, Player const* source, Unit const* target);
+
     private:
         AchievementCriteriaRequirementMap m_criteriaRequirementMap;
 
         // store achievement criterias by type to speed up lookup
-        AchievementCriteriaEntryList m_AchievementCriteriasByType[ACHIEVEMENT_CRITERIA_TYPE_TOTAL];
+        AchievementCriteriaEntryVector m_AchievementCriteriasByType[ACHIEVEMENT_CRITERIA_TYPE_TOTAL];
         // store achievement criterias by achievement to speed up lookup
         AchievementCriteriaListByAchievement m_AchievementCriteriaListByAchievement;
         // store achievements by referenced achievement id to speed up lookup
         AchievementListByReferencedId m_AchievementListByReferencedId;
+        AchievementCriteriaEntryVector m_achievementCriteriaByFailEvent[uint8(CriteriaFailEvent::Count)];
+        AchievementCriteriaEntryVector m_achievementCriteriaByStartEvent[uint8(CriteriaStartEvent::Count)];
+        AchievementCriteriaEntryVector m_achievementCriteriaByTimedEvent[uint8(CriteriaTimedEvent::Count)];
 
         typedef std::set<uint32> AllCompletedAchievements;
         AllCompletedAchievements m_allCompletedAchievements;
 
         AchievementRewardsMap       m_achievementRewards;
         AchievementRewardLocalesMap m_achievementRewardLocales;
+
+        std::map<std::string, AchievementCriteriaScript*> m_criteriaScriptByString;
+        std::map<uint32, AchievementCriteriaScript*> m_criteriaScriptById;
+        std::map<std::string, std::vector<uint32>> m_criteriaStringById;
 };
 
 #define sAchievementMgr MaNGOS::Singleton<AchievementGlobalMgr>::Instance()

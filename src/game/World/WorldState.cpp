@@ -377,7 +377,7 @@ void WorldState::SaveHelper(std::string& stringToSave, SaveIds saveId)
     CharacterDatabase.PExecute("INSERT INTO world_state(Id,Data) VALUES('%u','%s')", saveId, stringToSave.data());
 }
 
-void WorldState::HandleGameObjectUse(GameObject* go, Unit* user)
+void WorldState::HandleGameObjectUse(GameObject* go, Unit* /*user*/)
 {
     switch (go->GetEntry())
     {
@@ -434,7 +434,7 @@ void WorldState::HandleGameObjectUse(GameObject* go, Unit* user)
     }
 }
 
-void WorldState::HandleGameObjectRevertState(GameObject* go)
+void WorldState::HandleGameObjectRevertState(GameObject* /*go*/)
 {
 
 }
@@ -1791,7 +1791,7 @@ bool WorldState::SummonMouth(Map* map, ScourgeInvasionData::InvasionZone& zone, 
         Creature* existingMouth = map->GetCreature(zone.mouthGuid);
 
         if (existingMouth)
-            existingMouth->RemoveFromWorld();
+            existingMouth->AddObjectToRemoveList();
 
         if (Creature* mouth = WorldObject::SummonCreature(TempSpawnSettings(nullptr, NPC_MOUTH_OF_KELTHUZAD, position.x, position.y, position.z, position.o, TEMPSPAWN_DEAD_DESPAWN, 0, true), map, 1))
         {
@@ -1816,7 +1816,7 @@ bool WorldState::SummonPallid(Map* map, ScourgeInvasionData::CityAttack& zone, P
         uint32 pathID = 0;
 
         if (existingPallid)
-            existingPallid->RemoveFromWorld();
+            existingPallid->AddObjectToRemoveList();
 
         if (Creature* pallid = WorldObject::SummonCreature(TempSpawnSettings(nullptr, PickRandomValue(NPC_PALLID_HORROR, NPC_PATCHWORK_TERROR), position.x, position.y, position.z, position.o, TEMPSPAWN_DEAD_DESPAWN, 0, true), map, 1))
         {
@@ -2093,7 +2093,7 @@ void WorldState::AddSunsReachProgress(uint32 questId)
     uint32 addedValue = 1;
     switch (questId)
     {
-        case QUEST_ERRATIC_BEHAVIOR: counter = COUNTER_ERRATIC_BEHAVIOR; otherCounter = COUNTER_SANCTUM_WARDS; worldState = WORLD_STATE_QUEL_DANAS_SANCTUM; break;
+        case QUEST_ERRATIC_BEHAVIOR: counter = COUNTER_ERRATIC_BEHAVIOR; otherCounter = COUNTER_ERRATIC_BEHAVIOR; worldState = WORLD_STATE_QUEL_DANAS_SANCTUM; break;
         case QUEST_SANCTUM_WARDS: counter = COUNTER_SANCTUM_WARDS; otherCounter = COUNTER_SANCTUM_WARDS; worldState = WORLD_STATE_QUEL_DANAS_SANCTUM; break;
         case QUEST_BATTLE_FOR_THE_SUNS_REACH_ARMORY: counter = COUNTER_BATTLE_FOR_THE_SUNS_REACH_ARMORY; otherCounter = COUNTER_DISTRACTION_AT_THE_DEAD_SCAR; worldState = WORLD_STATE_QUEL_DANAS_ARMORY; break;
         case QUEST_DISTRACTION_AT_THE_DEAD_SCAR: counter = COUNTER_DISTRACTION_AT_THE_DEAD_SCAR; otherCounter = COUNTER_BATTLE_FOR_THE_SUNS_REACH_ARMORY; worldState = WORLD_STATE_QUEL_DANAS_ARMORY; break;

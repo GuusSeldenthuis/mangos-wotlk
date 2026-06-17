@@ -76,7 +76,7 @@ enum AchievementFlags
 {
     ACHIEVEMENT_FLAG_NONE                   = 0x00000000,
     ACHIEVEMENT_FLAG_COUNTER                = 0x00000001,   // ACHIEVEMENT_FLAG_STATISTIC Just count statistic (never stop and complete)
-    ACHIEVEMENT_FLAG_UNK2                   = 0x00000002,   // ACHIEVEMENT_FLAG_HIDDEN not used
+    ACHIEVEMENT_FLAG_HIDDEN                 = 0x00000002,   // ACHIEVEMENT_FLAG_HIDDEN not used
     ACHIEVEMENT_FLAG_STORE_MAX_VALUE        = 0x00000004,   // ACHIEVEMENT_FLAG_HIDDEN_TILL_AWARDED Store only max value? used only in "Reach level xx"
     ACHIEVEMENT_FLAG_SUMM                   = 0x00000008,   // ACHIEVEMENT_FLAG_CUMULATIVE Use summ criteria value from all requirements (and calculate max value)
     ACHIEVEMENT_FLAG_MAX_USED               = 0x00000010,   // ACHIEVEMENT_FLAG_DISPLAY_HIGHEST Show max criteria (and calculate max value ??)
@@ -87,16 +87,41 @@ enum AchievementFlags
     ACHIEVEMENT_FLAG_REALM_FIRST_KILL       = 0x00000200,   //
 };
 
-enum AchievementCriteriaCondition
+enum class CriteriaFailEvent : uint8
 {
-    ACHIEVEMENT_CRITERIA_CONDITION_NONE      = 0,
-    ACHIEVEMENT_CRITERIA_CONDITION_NO_DEATH  = 1,
-    ACHIEVEMENT_CRITERIA_CONDITION_UNK1      = 2,           // only used in "Complete a daily quest every day for five consecutive days"
-    ACHIEVEMENT_CRITERIA_CONDITION_MAP       = 3,           // requires you to be on specific map
-    ACHIEVEMENT_CRITERIA_CONDITION_NO_LOOSE  = 4,           // only used in "Win 10 arenas without losing"
-    ACHIEVEMENT_CRITERIA_CONDITION_NO_SPELL_HIT = 9,        // not hit by spell; Only 6 criterias in 3.x
-    ACHIEVEMENT_CRITERIA_CONDITION_NO_GROUP  = 10,          // not in a group
-    ACHIEVEMENT_CRITERIA_CONDITION_UNK3      = 13,          // unk
+    None                                = 0,
+    Death                               = 1,    // Death
+    Hours24WithoutCompletingDailyQuest  = 2,    // 24 hours without completing a daily quest
+    LeaveBattleground                   = 3,    // Leave a battleground
+    LoseRankedArenaMatchWithTeamSize    = 4,    // Lose a ranked arena match with team size {#Team Size}
+    LoseAura                            = 5,    // Lose aura "{Spell}"
+    GainAura                            = 6,    // Gain aura "{Spell}"
+    GainAuraEffect                      = 7,    // Gain aura effect "{SpellAuraNames.EnumID}"
+    CastSpell                           = 8,    // Cast spell "{Spell}"
+    BeSpellTarget                       = 9,    // Have spell "{Spell}" cast on you
+    ModifyPartyStatus                   = 10,   // Modify your party status
+
+    Count
+};
+
+enum class CriteriaStartEvent : uint8
+{
+    None                            = 0, // - NONE -
+    ReachLevel                      = 1, // Reach level {#Level}
+    CompleteDailyQuest              = 2, // Complete daily quest "{QuestV2}"
+    StartBattleground               = 3, // Start battleground "{Map}"
+    WinRankedArenaMatchWithTeamSize = 4, // Win a ranked arena match with team size {#Team Size}
+    GainAura                        = 5, // Gain aura "{Spell}"
+    GainAuraEffect                  = 6, // Gain aura effect "{SpellAuraNames.EnumID}"
+    CastSpell                       = 7, // Cast spell "{Spell}"
+    BeSpellTarget                   = 8, // Have spell "{Spell}" cast on you
+    AcceptQuest                     = 9, // Accept quest "{QuestV2}"
+    KillNPC                         = 10, // Kill NPC "{Creature}"
+    KillPlayer                      = 11, // Kill player
+    UseItem                         = 12, // Use item "{Item}"
+    SendEvent                       = 13, // Send event "{GameEvents}" (player-sent/instance only)
+
+    Count
 };
 
 enum AchievementCriteriaCompletionFlags
@@ -110,14 +135,15 @@ enum AchievementCriteriaCompletionFlags
     ACHIEVEMENT_CRITERIA_FLAG_IS_ACHIEVEMENT_ID = 0x00000040,
 };
 
-enum AchievementCriteriaTimedTypes
+enum class CriteriaTimedEvent
 {
-    ACHIEVEMENT_TIMED_TYPE_EVENT            = 1,            // Timer is started by internal event with id in timerStartEvent
-    ACHIEVEMENT_TIMED_TYPE_QUEST            = 2,            // Timer is started by accepting quest with entry in timerStartEvent
-    ACHIEVEMENT_TIMED_TYPE_SPELL_CASTER     = 5,            // Timer is started by casting a spell with entry in timerStartEvent
-    ACHIEVEMENT_TIMED_TYPE_SPELL_TARGET     = 6,            // Timer is started by being target of spell with entry in timerStartEvent
-    ACHIEVEMENT_TIMED_TYPE_CREATURE         = 7,            // Timer is started by killing creature with entry in timerStartEvent
-    ACHIEVEMENT_TIMED_TYPE_ITEM             = 9,            // Timer is started by using item with entry in timerStartEvent
+    SendEvent       = 1,            // Timer is started by internal event with id in timerStartEvent
+    AcceptQuest     = 2,            // Timer is started by accepting quest with entry in timerStartEvent
+    CastSpell       = 5,            // Timer is started by casting a spell with entry in timerStartEvent
+    BeSpellTarget   = 6,            // Timer is started by being target of spell with entry in timerStartEvent
+    KillNpc         = 7,            // Timer is started by killing creature with entry in timerStartEvent
+    UseItem         = 9,            // Timer is started by using item with entry in timerStartEvent
+    Count
 };
 
 enum AchievementCriteriaTypes
@@ -559,38 +585,38 @@ enum VehicleFlags
 
 enum VehicleSeatFlags
 {
-    SEAT_FLAG_HAS_ENTER_ANIM        = 0x00000001,           // "HasLowerAnimForEnter"
-    SEAT_FLAG_HAS_RIDE_ANIM         = 0x00000002,           // "HasLowerAnimForRide"
-    SEAT_FLAG_UNK3                  = 0x00000004,
-    SEAT_FLAG_UNK4                  = 0x00000008,           // "ShouldUseVehicleSeatExitAnimationOnVoluntaryExit"
-    SEAT_FLAG_UNK5                  = 0x00000010,
-    SEAT_FLAG_UNK6                  = 0x00000020,
-    SEAT_FLAG_UNK7                  = 0x00000040,
-    SEAT_FLAG_UNK8                  = 0x00000080,
-    SEAT_FLAG_UNK9                  = 0x00000100,           // Note: only 5 seats are available with this flag in 3.3.5a; found only on flying dragons and harpoon guns
-    SEAT_FLAG_HIDE_PASSENGER        = 0x00000200,           // Passenger is hidden
-    SEAT_FLAG_ALLOW_TURNING         = 0x00000400,           // "AllowsTurning" | Note: allows the passenger to turn (change orientation) while boarded
-    SEAT_FLAG_CAN_CONTROL           = 0x00000800,           // Lua_UnitInVehicleControlSeat
-    SEAT_FLAG_CAN_CAST_MOUNT_SPELL  = 0x00001000,           // "Can Cast Mount Spell" | Note: there are no seats with this flag in 3.3.5a
-    SEAT_FLAG_UNCONTROLLED          = 0x00002000,           // "Uncontrolled"
-    SEAT_FLAG_CAN_ATTACK            = 0x00004000,           // Can attack, cast spells and use items from vehicle?
-    SEAT_FLAG_SHOULD_USE_VEH_SEAT_EXIT_ANIM_ON_FORCED_EXIT = 0x00008000,           // "ShouldUseVehicleSeatExitAnimationOnForcedExit"
-    SEAT_FLAG_UNK14                 = 0x00010000,
-    SEAT_FLAG_UNK15                 = 0x00020000,
-    SEAT_FLAG_UNK16                 = 0x00040000,           // "HasVehicleExitAnimForVoluntaryExit"
-    SEAT_FLAG_UNK17                 = 0x00080000,           // "HasVehicleExitAnimForForcedExit"
-    SEAT_FLAG_NOT_SELECTABLE        = 0x00100000,
-    SEAT_FLAG_UNK19                 = 0x00200000,           // Note: only 4 seats are available with this flag in 3.3.5a; found only on flying dragons
-    SEAT_FLAG_UNK20                 = 0x00400000,           // "RecHasVehicleEnterAnim"
-    // SEAT_FLAG_UNK21              = 0x00800000,           // Lua_IsUsingVehicleControls | Note: there are no seats with this flag in 3.3.5a
-    SEAT_FLAG_UNK22                 = 0x01000000,           // "EnableVehicleZoom"
-    SEAT_FLAG_CAN_EXIT              = 0x02000000,           // Lua_CanExitVehicle
-    SEAT_FLAG_CAN_SWITCH            = 0x04000000,           // Lua_CanSwitchVehicleSeats
-    SEAT_FLAG_UNK23                 = 0x08000000,           // "HasStartWaitingForVehicleTransitionAnimEnter"
-    SEAT_FLAG_UNK24                 = 0x10000000,           // "HasStartWaitingForVehicleTransitionAnimExit"
-    SEAT_FLAG_CAN_CAST              = 0x20000000,           // Lua_UnitHasVehicleUI
-    SEAT_FLAG_UNK25                 = 0x40000000,
-    SEAT_FLAG_UNK26                 = 0x80000000,           // "AllowsInteraction"
+    SEAT_FLAG_HAS_ENTER_ANIM                                  = 0x00000001,           // "HasLowerAnimForEnter"
+    SEAT_FLAG_HAS_RIDE_ANIM                                   = 0x00000002,           // "HasLowerAnimForRide"
+    SEAT_FLAG_UNK3                                            = 0x00000004,
+    SEAT_FLAG_SHOULD_USE_VEH_SEAT_EXIT_ANIM_ON_VOLUNTARY_EXIT = 0x00000008,           // NYI "ShouldUseVehicleSeatExitAnimationOnVoluntaryExit"
+    SEAT_FLAG_UNK5                                            = 0x00000010,
+    SEAT_FLAG_UNK6                                            = 0x00000020,
+    SEAT_FLAG_UNK7                                            = 0x00000040,
+    SEAT_FLAG_UNK8                                            = 0x00000080,
+    SEAT_FLAG_UNK9                                            = 0x00000100,           // Note: only 5 seats are available with this flag in 3.3.5a; found only on flying dragons and harpoon guns
+    SEAT_FLAG_HIDE_PASSENGER                                  = 0x00000200,           // Passenger is hidden
+    SEAT_FLAG_ALLOW_TURNING                                   = 0x00000400,           // "AllowsTurning" | Note: allows the passenger to turn (change orientation) while boarded
+    SEAT_FLAG_CAN_CONTROL                                     = 0x00000800,           // Lua_UnitInVehicleControlSeat
+    SEAT_FLAG_CAN_CAST_MOUNT_SPELL                            = 0x00001000,           // "Can Cast Mount Spell" | Note: there are no seats with this flag in 3.3.5a
+    SEAT_FLAG_UNCONTROLLED                                    = 0x00002000,           // "Uncontrolled"
+    SEAT_FLAG_CAN_ATTACK                                      = 0x00004000,           // Can attack, cast spells and use items from vehicle?
+    SEAT_FLAG_SHOULD_USE_VEH_SEAT_EXIT_ANIM_ON_FORCED_EXIT    = 0x00008000,           // "ShouldUseVehicleSeatExitAnimationOnForcedExit"
+    SEAT_FLAG_UNK14                                           = 0x00010000,
+    SEAT_FLAG_UNK15                                           = 0x00020000,
+    SEAT_FLAG_HAS_VEH_EXIT_ANIM_VOLUNTARY_EXIT                = 0x00040000,           // NYI "HasVehicleExitAnimForVoluntaryExit"
+    SEAT_FLAG_HAS_VEH_EXIT_ANIM_FORCED_EXIT                   = 0x00080000,           // NYI "HasVehicleExitAnimForForcedExit"
+    SEAT_FLAG_NOT_SELECTABLE                                  = 0x00100000,
+    SEAT_FLAG_UNK19                                           = 0x00200000,           // Note: only 4 seats are available with this flag in 3.3.5a; found only on flying dragons
+    SEAT_FLAG_REC_HAS_VEHICLE_ENTER_ANIM                      = 0x00400000,           // NYI "RecHasVehicleEnterAnim"
+    SEAT_FLAG_IS_USING_VEHICLE_CONTROLS                       = 0x00800000,           // NYI Lua_IsUsingVehicleControls | Note: there are no seats with this flag in 3.3.5a
+    SEAT_FLAG_ENABLE_VEHICLE_ZOOM                             = 0x01000000,           // NYI "EnableVehicleZoom"
+    SEAT_FLAG_CAN_EXIT                                        = 0x02000000,           // Lua_CanExitVehicle
+    SEAT_FLAG_CAN_SWITCH                                      = 0x04000000,           // Lua_CanSwitchVehicleSeats
+    SEAT_FLAG_HAS_START_WAITING_FOR_VEH_TRANSITION_ANIM_ENTER = 0x08000000,           // NYI "HasStartWaitingForVehicleTransitionAnimEnter"
+    SEAT_FLAG_HAS_START_WAITING_FOR_VEH_TRANSITION_ANIM_EXIT  = 0x10000000,           // NYI "HasStartWaitingForVehicleTransitionAnimExit"
+    SEAT_FLAG_CAN_CAST                                        = 0x20000000,           // Lua_UnitHasVehicleUI
+    SEAT_FLAG_UNK25                                           = 0x40000000,
+    VEHICLE_SEAT_FLAG_ALLOWS_INTERACTION                      = 0x80000000,           // NYI "AllowsInteraction"
 };
 
 enum VehicleSeatFlagsB

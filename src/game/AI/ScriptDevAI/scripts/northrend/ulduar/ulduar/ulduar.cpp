@@ -298,6 +298,24 @@ void instance_ulduar::OnCreatureCreate(Creature* pCreature)
             else
                 m_vaporVezaxBunnyGuid = pCreature->GetObjectGuid();
             return;
+        case NPC_DRUID_HORDE_N:
+        case NPC_DRUID_HORDE_H:
+        case NPC_SHAMAN_HORDE_N:
+        case NPC_SHAMAN_HORDE_H:
+        case NPC_MAGE_HORDE_N:
+        case NPC_MAGE_HORDE_H:
+        case NPC_PRIEST_HORDE_N:
+        case NPC_PRIEST_HORDE_H:
+        case NPC_DRUID_ALLIANCE_N:
+        case NPC_DRUID_ALLIANCE_H:
+        case NPC_SHAMAN_ALLIANCE_N:
+        case NPC_SHAMAN_ALLIANCE_H:
+        case NPC_MAGE_ALLIANCE_N:
+        case NPC_MAGE_ALLIANCE_H:
+        case NPC_PRIEST_ALLIANCE_N:
+        case NPC_PRIEST_ALLIANCE_H:
+            pCreature->SetImmuneToNPC(false);
+            return;
 
         default:
             return;
@@ -537,7 +555,7 @@ void instance_ulduar::SetData(uint32 uiType, uint32 uiData)
             m_auiEncounter[uiType] = uiData;
             if (uiData == IN_PROGRESS)
             {
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_KILL_CREATURE, ACHIEV_START_IGNIS_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_IGNIS_ID, nullptr);
                 SetSpecialAchievementCriteria(TYPE_ACHIEV_SHATTERED, false);
             }
             break;
@@ -612,7 +630,7 @@ void instance_ulduar::SetData(uint32 uiType, uint32 uiData)
             DoUseDoorOrButton(GO_XT002_GATE);
             if (uiData == IN_PROGRESS)
             {
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_KILL_CREATURE, ACHIEV_START_XT002_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_XT002_ID, nullptr);
                 SetSpecialAchievementCriteria(TYPE_ACHIEV_NERF_ENG, true);
             }
             break;
@@ -891,7 +909,7 @@ void instance_ulduar::SetData(uint32 uiType, uint32 uiData)
             }
             else if (uiData == IN_PROGRESS)
             {
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_KILL_CREATURE, ACHIEV_START_YOGG_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_YOGG_ID, nullptr);
                 SetSpecialAchievementCriteria(TYPE_ACHIEV_DRIVE_CRAZY, true);
             }
             break;
@@ -1017,7 +1035,7 @@ void instance_ulduar::SetData(uint32 uiType, uint32 uiData)
         case TYPE_FREYA_CONSPEEDATORY:
             m_auiAchievEncounter[ACHIEV_FREYA_CONSPEEDATORY] = uiData;
             if (uiData == DONE)
-                DoStartTimedAchievement(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, ACHIEV_START_FREYA_ID);
+                instance->StartEventForAllPlayersInMap(ACHIEV_START_FREYA_ID, nullptr);
             break;
 
         // Other types - not saved
@@ -1748,6 +1766,17 @@ bool ProcessEventId_event_ulduar(uint32 uiEventId, Object* pSource, Object* /*pT
             if (instance_ulduar* pInstance = (instance_ulduar*)((Creature*)pSource)->GetInstanceData())
             {
                 pInstance->SetSpecialAchievementCriteria(TYPE_ACHIEV_NERF_ENG, false);
+                return true;
+            }
+        }
+    }
+    else if (uiEventId == EVENT_ID_FLASH_FREEZE)
+    {
+        if (pSource->GetTypeId() == TYPEID_PLAYER)
+        {
+            if (instance_ulduar* instance = static_cast<instance_ulduar*>(static_cast<Player*>(pSource)->GetInstanceData()))
+            {
+                instance->SetSpecialAchievementCriteria(TYPE_ACHIEV_CHEESE_FREEZE, false);
                 return true;
             }
         }

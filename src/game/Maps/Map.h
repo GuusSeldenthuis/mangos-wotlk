@@ -38,6 +38,7 @@
 #include "Globals/GraveyardManager.h"
 #include "Maps/SpawnManager.h"
 #include "Maps/MapDataContainer.h"
+#include "Util/UniqueTrackablePtr.h"
 #include "World/WorldStateVariableManager.h"
 
 #include <bitset>
@@ -120,6 +121,7 @@ struct ZoneDynamicInfo
 #endif
 
 #define MIN_UNLOAD_DELAY      1                             // immediate unload
+#define UPDATE_TICK         400
 
 typedef std::unordered_map<uint32 /*zoneId*/, ZoneDynamicInfo> ZoneDynamicInfoMap;
 
@@ -156,6 +158,8 @@ class Map : public GridRefManager<NGridType>
         void VisitNearbyCellsOf(WorldObject* obj, TypeContainerVisitor<MaNGOS::ObjectUpdater, GridTypeMapContainer> &gridVisitor, TypeContainerVisitor<MaNGOS::ObjectUpdater, WorldTypeMapContainer> &worldVisitor);
         virtual void Update(const uint32&);
 
+        uint64 PerformObjectUpdate(uint32 t_diff, WorldObjectUnSet& objToUpdate);
+
         void MessageBroadcast(Player const*, WorldPacket const&, bool to_self);
         void MessageBroadcast(WorldObject const*, WorldPacket const&);
         void MessageDistBroadcast(Player const*, WorldPacket const&, float dist, bool to_self, bool own_team_only = false);
@@ -172,11 +176,13 @@ class Map : public GridRefManager<NGridType>
         float GetVisibilityDistance() const { return m_VisibleDistance; }
         // function for setting up visibility distance for maps on per-type/per-Id basis
         virtual void InitVisibilityDistance();
+        void VisiblityDistanceChanged(WorldObject* obj, float oldVisibility, VisibilityDistanceType newVisiblity);
 
         void PlayerRelocation(Player*, float x, float y, float z, float orientation);
         void CreatureRelocation(Creature* creature, float x, float y, float z, float ang);
         void GameObjectRelocation(GameObject* go, float x, float y, float z, float orientation, bool respawnRelocationOnFail = true);
         void DynamicObjectRelocation(DynamicObject* dynObj, float x, float y, float z, float orientation);
+        void CorpseRelocation(Corpse* corpse, float x, float y, float z, float orientation);
 
         template<class T, class CONTAINER> void Visit(const Cell& cell, TypeContainerVisitor<T, CONTAINER>& visitor);
 
@@ -214,6 +220,10 @@ class Map : public GridRefManager<NGridType>
         bool CreatureRespawnRelocation(Creature* c);        // used only in CreatureRelocation and ObjectGridUnloader
 
         uint32 GetInstanceId() const { return i_InstanceId; }
+
+        MaNGOS::unique_weak_ptr<Map> GetWeakPtr() const { return m_weakRef; }
+        void SetWeakPtr(MaNGOS::unique_weak_ptr<Map> weakRef) { m_weakRef = std::move(weakRef); }
+
         virtual bool CanEnter(Player* player);
         const char* GetMapName() const;
 
@@ -252,6 +262,8 @@ class Map : public GridRefManager<NGridType>
         MapPersistentState* GetPersistentState() const { return m_persistentState; }
 
         void AddObjectToRemoveList(WorldObject* obj);
+        void RemoveObjectFromRemoveList(WorldObject* obj);
+        bool IsInRemoveList(WorldObject* obj) const;
 
         void UpdateObjectVisibility(WorldObject* obj, Cell cell, const CellPair& cellpair);
 
@@ -279,6 +291,9 @@ class Map : public GridRefManager<NGridType>
             SCRIPT_EXEC_PARAM_UNIQUE_BY_TARGET        = 0x02,   // Start Script only if not yet started (uniqueness identified by id and target)
             SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE_TARGET = 0x03,   // Start Script only if not yet started (uniqueness identified by id, source and target)
         };
+
+        void StartEventForAllPlayersInMap(uint32 eventId, Object* target); // only do this for instances
+        bool StartEvent(uint32 eventId, Object* source, Object* target, bool isStart = true);
         bool ScriptsStart(ScriptMapType scriptType, uint32 id, Object* source, Object* target, ScriptExecutionParam execParams = SCRIPT_EXEC_PARAM_NONE);
         void ScriptCommandStart(ScriptInfo const& script, uint32 delay, Object* source, Object* target);
 
@@ -325,16 +340,24 @@ class Map : public GridRefManager<NGridType>
         MapStoredObjectTypesContainer& GetObjectsStore() { return m_objectsStore; }
         std::map<uint32, uint32>& GetTempCreatures() { return m_tempCreatures; }
         std::map<uint32, uint32>& GetTempPets() { return m_tempPets; }
+        
+        // schedule for update object create change
+        void AddUpdateCreateObject(Object* obj) { m_objectsToClientCreateUpdate.insert({ obj, obj->GetObjectGuid() }); }
+        void RemoveUpdateCreateObject(Object* obj) { m_objectsToClientCreateUpdate.erase({ obj, obj->GetObjectGuid() }); }
+        // schedule for update object values change
+        void AddUpdateObject(Object* obj) { m_objectsToClientUpdate.insert(obj); }
+        void RemoveUpdateObject(Object* obj) { m_objectsToClientUpdate.erase(obj); }
+        // schedule for update object visibility change
+        void AddUpdateMovementObject(Object* obj) { m_objectsToClientMovementUpdate.insert(obj); }
+        void RemoveUpdateMovementObject(Object* obj) { m_objectsToClientMovementUpdate.erase(obj); }
+        // schedule update object destruction of object
+        void AddUpdateRemoveObject(GuidSet& visible, ObjectGuid guid);
+        void AddUpdateRemoveObject(GuidSet&& visible, ObjectGuid guid);
 
-        void AddUpdateObject(Object* obj)
-        {
-            i_objectsToClientUpdate.insert(obj);
-        }
+        void AddCreateAtClientObject(Player* player, Object* obj);
+        void AddCreateAtClientObjects(PlayerSet const& players, Object* obj);
 
-        void RemoveUpdateObject(Object* obj)
-        {
-            i_objectsToClientUpdate.erase(obj);
-        }
+        void AddCameraToWorld(WorldObject* obj);
 
         // DynObjects currently
         uint32 GenerateLocalLowGuid(HighGuid guidhigh);
@@ -422,8 +445,16 @@ class Map : public GridRefManager<NGridType>
         WorldStateVariableManager& GetVariableManager() { return m_variableManager; }
         WorldStateVariableManager const& GetVariableManager() const { return m_variableManager; }
 
+        virtual BattleGround* GetBG() const { return nullptr; }
+
         // debug
         std::set<ObjectGuid> m_objRemoveList; // this will eventually eat up too much memory - only used for debugging VisibleNotifier::Notify() customlog leak
+
+#ifdef ENABLE_PLAYERBOTS
+        bool HasRealPlayers() { return hasRealPlayers; }
+        bool HasActiveZones() { return !m_activeZones.empty(); }
+        bool HasActiveZone(uint32 zoneId) { return find(m_activeZones.begin(), m_activeZones.end(), zoneId) != m_activeZones.end(); }
+#endif
 
         /* 
          * Loads existing precomputed tiles that are defined in BuildingMap in MoveMapSharedDefines.h
@@ -438,15 +469,24 @@ class Map : public GridRefManager<NGridType>
 
         void AwardLFGRewards(uint32 dungeonId);
 
+        bool IsUpdateObjectTick() const;
+        bool IsStealthTick() const;
+
+        void AddWaypointingNpc(Unit* npc);
+        void RemoveWaypointingNpc(Unit* npc);
+
+        void UpdateInfinite(Player& player, UpdateData& updateData, GuidSet& clientGUIDs, WorldObjectSet& visibleNow) const;
+
     private:
         void LoadMapAndVMap(int gx, int gy);
 
         void SetTimer(uint32 t) { i_gridExpiry = t < MIN_GRID_DELAY ? MIN_GRID_DELAY : t; }
 
-        void SendInitSelf(Player* player) const;
+        void SendInitBeforeGrid(Player* player, UpdateData& updateData) const;
+        void SendInitSelf(Player* player, UpdateData& updateData) const;
 
-        void SendInitTransports(Player* player) const;
-        void SendRemoveTransports(Player* player) const;
+        void SendInitInfiniteObjects(Player* player, UpdateData& updateData) const;
+        void SendRemoveInfinite(Player* player) const;
         void LoadTransports();
 
         bool CreatureCellRelocation(Creature* c, const Cell& new_cell);
@@ -471,16 +511,27 @@ class Map : public GridRefManager<NGridType>
         void setNGrid(NGridType* grid, uint32 x, uint32 y);
         void ScriptsProcess();
 
+        void UpdateVisibility(UpdateDataMapType& update_players);
         void SendObjectUpdates();
-        std::set<Object*> i_objectsToClientUpdate;
+        std::set<Object*> m_objectsToClientUpdate;
+        std::set<std::pair<Object*, ObjectGuid>> m_objectsToClientCreateUpdate;
+        std::set<Object*> m_objectsToClientMovementUpdate;
+        std::vector<std::pair<GuidSet, ObjectGuid>> m_objectsToClientRemove;
+        std::unordered_map<Object*, PlayerSet> m_visibilityAdded;
+
+        std::set<WorldObject*> m_largeObjects;
+        std::set<WorldObject*> m_infiniteObjects;
+        std::set<Unit*> m_waypointingNpcs;
 
     protected:
         MapEntry const* i_mapEntry;
         uint8 i_spawnMode;
         uint32 i_id;
         uint32 i_InstanceId;
+        MaNGOS::unique_weak_ptr<Map> m_weakRef;
         uint32 m_unloadTimer;
         uint32 m_clientUpdateTimer;
+        uint32 m_clientUpdateTick;
         float m_VisibleDistance;
         MapPersistentState* m_persistentState;
 
@@ -525,10 +576,10 @@ class Map : public GridRefManager<NGridType>
         // Map local low guid counters
         ObjectGuidGenerator<HIGHGUID_UNIT> m_CreatureGuids;
         ObjectGuidGenerator<HIGHGUID_GAMEOBJECT> m_GameObjectGuids;
-        ObjectGuidGenerator<HIGHGUID_TRANSPORT> m_transportGuids;
         ObjectGuidGenerator<HIGHGUID_DYNAMICOBJECT> m_DynObjectGuids;
         ObjectGuidGenerator<HIGHGUID_PET> m_PetGuids;
         ObjectGuidGenerator<HIGHGUID_VEHICLE> m_VehicleGuids;
+        ObjectGuidGenerator<HIGHGUID_MO_TRANSPORT> m_transportGuids;
 
         // Type specific code for add/remove to/from grid
         template<class T>
@@ -567,6 +618,12 @@ class Map : public GridRefManager<NGridType>
         std::shared_ptr<CreatureSpellListContainer> m_spellListContainer;
 
         WorldStateVariableManager m_variableManager;
+
+#ifdef ENABLE_PLAYERBOTS
+        std::vector<uint32> m_activeZones;
+        uint32 m_activeZonesTimer;
+        bool hasRealPlayers;
+#endif
 
         ZoneDynamicInfoMap m_zoneDynamicInfo;
         ZoneDynamicInfoMap m_areaDynamicInfo;
@@ -623,7 +680,7 @@ class BattleGroundMap : public Map
     private:
         using Map::GetPersistentState;                      // hide in subclass for overwrite
     public:
-        BattleGroundMap(uint32 id, time_t, uint32 InstanceId, uint8 spawnMode);
+        BattleGroundMap(uint32 id, time_t, uint32 InstanceId, uint8 spawnMode, BattleGround* bg);
         ~BattleGroundMap();
 
         virtual void Initialize(bool) override;
@@ -635,14 +692,16 @@ class BattleGroundMap : public Map
         void UnloadAll(bool pForce) override;
 
         virtual void InitVisibilityDistance() override;
-        BattleGround* GetBG() const { return m_bg; }
-        void SetBG(BattleGround* bg) { m_bg = bg; }
+        BattleGround* GetBG() const override { return m_bg; }
+
+        bool IsScheduledForDeletion() const { return m_scheduledForDeletion; }
 
         // can't be nullptr for loaded map
         BattleGroundPersistentState* GetPersistanceState() const;
 
     private:
         BattleGround* m_bg;
+        bool m_scheduledForDeletion;
 };
 
 template<class T, class CONTAINER>

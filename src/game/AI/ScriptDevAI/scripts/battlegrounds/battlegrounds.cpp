@@ -183,7 +183,7 @@ struct FlagClickBg : public SpellScript
         // misusing original caster to pass along original flag GO - if in future conflicts, substitute it for something else
         SpellCastResult result = target->CastSpell(target, spellId, TRIGGERED_IGNORE_GCD | TRIGGERED_HIDE_CAST_IN_COMBAT_LOG | TRIGGERED_IGNORE_CURRENT_CASTED_SPELL, nullptr, nullptr, spell->GetTrueCaster()->GetObjectGuid());
         if (result == SPELL_CAST_OK) // wotlk+ done like this
-            StartEvents_Event(spell->GetTrueCaster()->GetMap(), eventId, target, spell->GetTrueCaster(), true);
+            spell->GetTrueCaster()->GetMap()->StartEvent(eventId, target, spell->GetTrueCaster(), true);
     }
 };
 
@@ -436,6 +436,15 @@ struct spell_teleport_sota : public SpellScript
     }
 };
 
+// Criterion 6800 - Sickly Gazelle
+struct SicklyGazelleAchiev : public AchievementCriteriaScript
+{
+    bool OnCriteriaCheck(Player const* source, Unit const* target) const override
+    {
+        return target->GetTypeId() == TYPEID_PLAYER && target->IsMounted();
+    }
+};
+
 void AddSC_battleground()
 {
     Script* pNewScript = new Script;
@@ -462,4 +471,6 @@ void AddSC_battleground()
     RegisterSpellScript<spell_repair_cannon>("spell_repair_cannon");
     RegisterSpellScript<spell_end_of_round>("spell_end_of_round");
     RegisterSpellScript<spell_teleport_sota>("spell_teleport_sota");
+
+    sAchievementMgr.RegisterAchievementCriteriaScript<SicklyGazelleAchiev>("criterion_sickly_gazelle");
 }

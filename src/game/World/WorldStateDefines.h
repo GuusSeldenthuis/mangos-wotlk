@@ -355,6 +355,9 @@ enum WorldStateID : int32
     WORLD_STATE_CUSTOM_STV_GRP_01      = 330001,
     WORLD_STATE_CUSTOM_STV_GRP_02      = 330002,
 
+    // Ashenvale Quest King of the Foulweald
+    WORLD_STATE_CUSTOM_FOULWEALD       = 18003,
+
     // Tbc
     WORLD_STATE_CUSTOM_SPAWN_MALACRASS = 5680001,
 
@@ -367,6 +370,61 @@ enum WorldStateID : int32
     // The Arcatraz
     WORLD_STATE_PROTEAN_HORROR     = 5520001,               // Prevents that Protean Horrors respawn
     WORLD_STATE_PROTEAN_NIGHTMARE  = 5520002,               // Prevents that Protean Nightmare respawn
+    
+    // The Underbog
+    WORLD_STATE_UNDERBOG_GROUP_3    = 5460001,              // 2 Possible group versions
+    WORLD_STATE_UNDERBOG_GROUP_18   = 5460002,              // 2 Possible group versions
+
+    WORLD_STATE_UNDERBOG_GROUP_19   = 5460003,              // 2 Possible group versions
+    WORLD_STATE_UNDERBOG_GROUP_20   = 5460004,              // 2 Possible group versions
+    WORLD_STATE_UNDERBOG_GROUP_22   = 5460005,              // 2 Possible group versions
+    WORLD_STATE_UNDERBOG_GROUP_24   = 5460006,              // 2 Possible group versions
+    WORLD_STATE_UNDERBOG_GROUP_25   = 5460007,              // 2 Possible group versions
+
+    // The Slave Pens
+    WORLD_STATE_NATURALIST_BITE    = 5470044,              // Spawns Coilfang Group after freeing Naturalist Bite
+
+    // Shadow Labyrinth
+    WORLD_STATE_SHADOW_LAB_GROUP_01 = 5550001,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_05 = 5550002,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_12 = 5550003,              // 3 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_13 = 5550004,              // 3 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_23 = 5550005,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_24 = 5550006,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_25 = 5550007,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_33 = 5550008,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_34 = 5550009,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_35 = 5550010,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_40 = 5550011,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_41 = 5550012,              // 2 Possible group versions
+    WORLD_STATE_SHADOW_LAB_GROUP_42 = 5550013,              // 2 Possible group versions   
+    // The Screaming Hall 
+    // Worldstates that handle the respawn of runners between the groups in Murmur room
+    // Activated via database when door opens, deactivated when spawn_group died
+    WORLD_STATE_SHADOW_LAB_GROUP_48 = 5550014,              // 2 Runners that instantly die after reaching last waypoint
+    WORLD_STATE_SHADOW_LAB_GROUP_49 = 5550015,              // First runner
+    WORLD_STATE_SHADOW_LAB_GROUP_50 = 5550016,              // 2nd runner
+    WORLD_STATE_SHADOW_LAB_GROUP_51 = 5550017,              // 3rd runner
+    WORLD_STATE_SHADOW_LAB_GROUP_52 = 5550018,              // 4th and 5th runner
+    // Cabal Assasins
+    WORLD_STATE_SHADOW_LAB_ASSASIN_01 = 5550019,
+    WORLD_STATE_SHADOW_LAB_ASSASIN_02 = 5550020,
+
+    // Sethekk Halls
+    WORLD_STATE_SETHEKK_GROUP_12    = 5560001,              // 2 Possible group versions
+    WORLD_STATE_SETHEKK_GROUP_13    = 5560002,              // 2 Possible group versions
+    WORLD_STATE_SETHEKK_GROUP_14    = 5560003,              // 2 Possible group versions
+    WORLD_STATE_SETHEKK_GROUP_16    = 5560004,              // 2 Possible group versions
+    WORLD_STATE_SETHEKK_GROUP_20    = 5560005,              // 2 Possible group versions
+    WORLD_STATE_SETHEKK_GROUP_21    = 5560006,              // 2 Possible group versions
+
+    // Mana Tombs
+    WORLD_STATE_MANA_TOMBS_GROUP_18 = 5570001,              // 2 Possible group versions
+    WORLD_STATE_MANA_TOMBS_GROUP_20 = 5570002,              // 2 Possible group versions
+    WORLD_STATE_MANA_TOMBS_GROUP_27 = 5570003,              // 2 Possible group versions
+    WORLD_STATE_MANA_TOMBS_GROUP_32 = 5570004,              // 2 Possible group versions
+    WORLD_STATE_MANA_TOMBS_GROUP_34 = 5570005,              // 2 Possible group versions
+    WORLD_STATE_MANA_TOMBS_GROUP_35 = 5570006,              // 2 Possible group versions
 
     // Wotlk
     WORLD_STATE_CUSTOM_HEADLESS_HORSEMAN_DUNGEON    = 20000,

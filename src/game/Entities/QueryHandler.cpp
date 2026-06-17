@@ -31,6 +31,7 @@
 #include "Entities/NPCHandler.h"
 #include "Server/SQLStorages.h"
 #include "Maps/GridDefines.h"
+#include "Entities/Transports.h"
 
 void WorldSession::SendNameQueryResponse(CharacterNameQueryResponse& response) const
 {
@@ -206,7 +207,7 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket& recv_data)
         data << uint8(0) << uint8(0) << uint8(0);           // name2, name3, name4, always empty
         data << subName;
         data << ci->IconName;                               // "Directions" for guard, string for Icons 2.3.0
-        data << uint32(ci->CreatureTypeFlags);              // flags
+        data << uint32(ci->TypeFlags);                      // flags
         data << uint32(ci->CreatureType);                   // CreatureType.dbc
         data << uint32(ci->Family);                         // CreatureFamily.dbc
         data << uint32(ci->Rank);                           // Creature Rank (elite, boss, etc)
@@ -220,7 +221,7 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket& recv_data)
         data << float(ci->PowerMultiplier);                 // power multiplier
         data << uint8(ci->RacialLeader);
         for (unsigned int QuestItem : ci->QuestItems)
-            data << uint32(QuestItem);              // itemId[6], quest drop
+            data << uint32(QuestItem);                      // itemId[6], quest drop
         data << uint32(ci->MovementTemplateId);             // CreatureMovementInfo.dbc
         SendPacket(data);
         DEBUG_LOG("WORLD: Sent SMSG_CREATURE_QUERY_RESPONSE");
@@ -249,7 +250,8 @@ void WorldSession::HandleGameObjectQueryOpcode(WorldPacket& recv_data)
     {
         std::string Name = info->name;
         std::string IconName = info->IconName;
-        std::string CastBarCaption = info->castBarCaption;
+        std::string openingText = info->OpeningText;
+        std::string closingText = info->ClosingText;
 
         int loc_idx = GetSessionDbLocaleIndex();
         if (loc_idx >= 0)
@@ -259,8 +261,10 @@ void WorldSession::HandleGameObjectQueryOpcode(WorldPacket& recv_data)
             {
                 if (gl->Name.size() > size_t(loc_idx) && !gl->Name[loc_idx].empty())
                     Name = gl->Name[loc_idx];
-                if (gl->CastBarCaption.size() > size_t(loc_idx) && !gl->CastBarCaption[loc_idx].empty())
-                    CastBarCaption = gl->CastBarCaption[loc_idx];
+                if (gl->OpeningText.size() > size_t(loc_idx) && !gl->OpeningText[loc_idx].empty())
+                    openingText = gl->OpeningText[loc_idx];
+                if (gl->ClosingText.size() > size_t(loc_idx) && !gl->ClosingText[loc_idx].empty())
+                    closingText = gl->ClosingText[loc_idx];
             }
         }
         DETAIL_LOG("WORLD: CMSG_GAMEOBJECT_QUERY '%s' - Entry: %u. ", info->name, entryID);
@@ -271,8 +275,8 @@ void WorldSession::HandleGameObjectQueryOpcode(WorldPacket& recv_data)
         data << Name;
         data << uint8(0) << uint8(0) << uint8(0);           // name2, name3, name4
         data << IconName;                                   // 2.0.3, string. Icon name to use instead of default icon for go's (ex: "Attack" makes sword)
-        data << CastBarCaption;                             // 2.0.3, string. Text will appear in Cast Bar when using GO (ex: "Collecting")
-        data << info->unk1;                                 // 2.0.3, string
+        data << openingText;                                // 2.0.3, string - when lock specifies action 0 or 1
+        data << closingText;                                // 2.0.3, string - when lock specifies action 2
         data.append(info->raw.data, 24);
         data << float(info->size);                          // go size
         for (unsigned int questItem : info->questItems)
@@ -306,9 +310,7 @@ void WorldSession::HandleCorpseQueryOpcode(WorldPacket& /*recv_data*/)
     }
 
     uint32 corpsemapid = corpse->GetMapId();
-    float x = corpse->GetPositionX();
-    float y = corpse->GetPositionY();
-    float z = corpse->GetPositionZ();
+    Position pos = corpse->GetPosition(corpse->GetTransport());
     int32 mapid = corpsemapid;
 
     // if corpse at different map
@@ -323,9 +325,9 @@ void WorldSession::HandleCorpseQueryOpcode(WorldPacket& /*recv_data*/)
                 if (TerrainInfo const* entranceMap = sTerrainMgr.LoadTerrain(corpseMapEntry->ghost_entrance_map))
                 {
                     mapid = corpseMapEntry->ghost_entrance_map;
-                    x = corpseMapEntry->ghost_entrance_x;
-                    y = corpseMapEntry->ghost_entrance_y;
-                    z = entranceMap->GetHeightStatic(x, y, MAX_HEIGHT);
+                    pos.x = corpseMapEntry->ghost_entrance_x;
+                    pos.y = corpseMapEntry->ghost_entrance_y;
+                    pos.z = entranceMap->GetHeightStatic(pos.x, pos.y, MAX_HEIGHT);
                 }
             }
         }
@@ -334,11 +336,11 @@ void WorldSession::HandleCorpseQueryOpcode(WorldPacket& /*recv_data*/)
     WorldPacket data(MSG_CORPSE_QUERY, 1 + (6 * 4));
     data << uint8(1);                                       // corpse found
     data << int32(mapid);
-    data << float(x);
-    data << float(y);
-    data << float(z);
+    data << float(pos.GetPositionX());
+    data << float(pos.GetPositionY());
+    data << float(pos.GetPositionZ());
     data << uint32(corpsemapid);
-    data << uint32(0);                                      // unknown
+    data << uint32(corpse->GetTransport() != nullptr ? corpse->GetTransport()->GetObjectGuid().GetCounter() : 0);
     SendPacket(data);
 }
 
@@ -476,14 +478,29 @@ void WorldSession::HandleCorpseMapPositionQueryOpcode(WorldPacket& recv_data)
 {
     DEBUG_LOG("WORLD: Recv CMSG_CORPSE_MAP_POSITION_QUERY");
 
-    uint32 unk;
-    recv_data >> unk;
+    uint32 transportCounter;
+    recv_data >> transportCounter;
+
+    Corpse* corpse = GetPlayer()->GetCorpse();
+
+    if (!corpse || !corpse->GetTransport() || corpse->GetTransport()->GetObjectGuid().GetCounter() != transportCounter)
+    {
+        WorldPacket data(SMSG_CORPSE_TRANSPORT_QUERY, 4 + 4 + 4 + 4);
+        data << float(0);
+        data << float(0);
+        data << float(0);
+        data << float(0);
+        SendPacket(data);
+        return;
+    }
+
+    Position pos = corpse->GetTransport()->GetPosition();
 
     WorldPacket data(SMSG_CORPSE_TRANSPORT_QUERY, 4 + 4 + 4 + 4);
-    data << float(0);
-    data << float(0);
-    data << float(0);
-    data << float(0);
+    data << float(pos.GetPositionX());
+    data << float(pos.GetPositionY());
+    data << float(pos.GetPositionZ());
+    data << float(pos.GetPositionO());
     SendPacket(data);
 }
 

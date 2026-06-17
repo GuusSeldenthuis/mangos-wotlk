@@ -123,10 +123,10 @@ struct boss_thaddiusAI : public BossAI
 
     void Reset() override
     {
+        BossAI::Reset();
         SetCombatScriptStatus(true);
         m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_IMMUNE_TO_PLAYER);
-        DoCastSpellIfCan(m_creature, SPELL_THADIUS_SPAWN);
-        BossAI::Reset();
+        DoCastSpellIfCan(nullptr, SPELL_THADIUS_SPAWN);
     }
 
     void Aggro(Unit* /*who*/) override
@@ -211,56 +211,6 @@ struct boss_thaddiusAI : public BossAI
     }
 };
 
-struct ShockThaddius : public SpellScript
-{
-    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
-    {
-        if (effIdx == EFFECT_INDEX_0)
-        {
-            Unit* target = spell->GetUnitTarget();
-            // Only do something to Thaddius, and on the first hit.
-            if (target->GetEntry() != NPC_THADDIUS || !target->HasAura(SPELL_THADIUS_SPAWN))
-                return;
-            // remove Stun and then Cast
-            target->RemoveAurasDueToSpell(SPELL_THADIUS_SPAWN);
-            target->CastSpell(nullptr, SPELL_THADIUS_LIGHTNING_VISUAL, TRIGGERED_OLD_TRIGGERED);
-        }
-    }
-};
-
-struct ThaddiusLightningVisual : public SpellScript
-{
-    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
-    {
-        Unit* target = spell->GetUnitTarget();
-        if (effIdx == EFFECT_INDEX_0 && target->IsCreature())
-        {
-            target->AI()->SetCombatScriptStatus(false);
-            static_cast<Creature*>(target)->SetInCombatWithZone(false);
-        }
-    }
-};
-
-bool EffectDummyNPC_spell_thaddius_encounter(Unit* /*pCaster*/, uint32 spellId, SpellEffectIndex uiEffIndex, Creature* creatureTarget, ObjectGuid /*originalCasterGuid*/)
-{
-    switch (spellId)
-    {
-        case SPELL_SHOCK_OVERLOAD:
-            if (uiEffIndex == EFFECT_INDEX_0)
-            {
-
-            }
-            return true;
-        case SPELL_THADIUS_LIGHTNING_VISUAL:
-            if (uiEffIndex == EFFECT_INDEX_0 && creatureTarget->GetEntry() == NPC_THADDIUS)
-            {
-
-            }
-            return true;
-    }
-    return false;
-}
-
 /************
 ** npc_tesla_coil
 ************/
@@ -272,8 +222,7 @@ enum TeslaCoilActions
 
 struct npc_tesla_coilAI : public ScriptedAI
 {
-    npc_tesla_coilAI(Creature* creature) : ScriptedAI(creature),
-        m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData()))
+    npc_tesla_coilAI(Creature* creature) : ScriptedAI(creature), m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData()))
     {
         SetAIImmobilizedState(true);
         SetCombatMovement(false);
@@ -328,9 +277,7 @@ enum ThaddiusAddActions
 
 struct boss_thaddiusAddsAI : public BossAI
 {
-    boss_thaddiusAddsAI(Creature* creature) : BossAI(creature, THADDIUS_ADD_ACTIONS_MAX),
-        m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData())),
-        m_isRegularMode(creature->GetMap()->IsRegularDifficulty())
+    boss_thaddiusAddsAI(Creature* creature) : BossAI(creature, THADDIUS_ADD_ACTIONS_MAX), m_instance(dynamic_cast<instance_naxxramas*>(creature->GetInstanceData())), m_isRegularMode(creature->GetMap()->IsRegularDifficulty())
     {
         SetDataType(TYPE_THADDIUS);
         AddCustomAction(THADDIUS_ADD_REVIVE, true, [&]()
@@ -365,6 +312,7 @@ struct boss_thaddiusAddsAI : public BossAI
 
     void Reset() override
     {
+        BossAI::Reset();
         m_isFakingDeath = false;
         m_areBothDead = false;
 
@@ -375,7 +323,6 @@ struct boss_thaddiusAddsAI : public BossAI
         SetDeathPrevention(true);
         SetCombatScriptStatus(false);
         SetCombatMovement(true);
-        BossAI::Reset();
     }
 
     Creature* GetOtherAdd() const
@@ -385,8 +332,7 @@ struct boss_thaddiusAddsAI : public BossAI
         {
             case NPC_FEUGEN:  return m_instance->GetSingleCreatureFromStorage(NPC_STALAGG);
             case NPC_STALAGG: return m_instance->GetSingleCreatureFromStorage(NPC_FEUGEN);
-            default:
-                return nullptr;
+            default: return nullptr;
         }
     }
 
@@ -401,12 +347,6 @@ struct boss_thaddiusAddsAI : public BossAI
         }
     }
 
-    void JustRespawned() override
-    {
-        Reset();                                            // Needed to reset the flags properly
-        JustReachedHome();
-    }
-
     void JustReachedHome() override
     {
         if (!m_instance)
@@ -418,16 +358,16 @@ struct boss_thaddiusAddsAI : public BossAI
             {
                 if (pOtherAI->IsCountingDead())
                 {
+                    other->SetRespawnDelay(1s, true);
                     other->ForcedDespawn();
-                    other->Respawn();
                 }
             }
         }
 
         if (Creature* tesla = GetClosestCreatureWithEntry(m_creature, NPC_TESLA_COIL, 50.f))
         {
+            tesla->SetRespawnDelay(1s, true);
             tesla->ForcedDespawn();
-            tesla->Respawn();
         }
 
         m_instance->SetData(TYPE_THADDIUS, FAIL);
@@ -449,7 +389,8 @@ struct boss_thaddiusAddsAI : public BossAI
     void PauseCombatMovement()
     {
         SetAIImmobilizedState(true);
-        AddCustomAction(THADDIUS_ADD_HOLD, 1s + 500ms, [&](){
+        AddCustomAction(THADDIUS_ADD_HOLD, 1s + 500ms, [&]()
+        {
             SetAIImmobilizedState(false);
             m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
             DisableTimer(THADDIUS_ADD_HOLD);
@@ -492,17 +433,7 @@ struct boss_stalaggAI : public boss_thaddiusAddsAI
     {
         AddOnKillText(SAY_STAL_SLAY);
         AddOnAggroText(SAY_STAL_AGGRO);
-        Reset();
-    }
-
-    void Reset() override
-    {
-        boss_thaddiusAddsAI::Reset();
-    }
-
-    void JustDied(Unit* /*killer*/) override
-    {
-        DoBroadcastText(SAY_STAL_DEATH, m_creature);
+        AddOnDeathText(SAY_STAL_DEATH);
     }
 };
 
@@ -516,20 +447,43 @@ struct boss_feugenAI : public boss_thaddiusAddsAI
     {
         AddOnKillText(SAY_FEUG_SLAY);
         AddOnAggroText(SAY_FEUG_AGGRO);
-        Reset();
-    }
-
-    void Reset() override
-    {
-        boss_thaddiusAddsAI::Reset();
-    }
-
-    void JustDied(Unit* /*killer*/) override
-    {
-        DoBroadcastText(SAY_FEUG_DEATH, m_creature);
+        AddOnDeathText(SAY_FEUG_DEATH);
     }
 };
 
+// 28159 - Shock
+struct ShockThaddius : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx == EFFECT_INDEX_0)
+        {
+            Unit* target = spell->GetUnitTarget();
+            // Only do something to Thaddius, and on the first hit.
+            if (target->GetEntry() != NPC_THADDIUS || !target->HasAura(SPELL_THADIUS_SPAWN))
+                return;
+            // remove Stun and then Cast
+            target->RemoveAurasDueToSpell(SPELL_THADIUS_SPAWN);
+            target->CastSpell(nullptr, SPELL_THADIUS_LIGHTNING_VISUAL, TRIGGERED_OLD_TRIGGERED);
+        }
+    }
+};
+
+// 28136 - Thadius Lightning Visual
+struct ThaddiusLightningVisual : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        Unit* target = spell->GetUnitTarget();
+        if (effIdx == EFFECT_INDEX_0 && target->IsCreature())
+        {
+            target->AI()->SetCombatScriptStatus(false);
+            static_cast<Creature*>(target)->SetInCombatWithZone(false);
+        }
+    }
+};
+
+// 54517 - Magnetic Pull
 struct MagneticPullThaddius : public SpellScript
 {
     void OnHit(Spell* spell, SpellMissInfo /*missInfo*/) const override
@@ -570,6 +524,7 @@ struct MagneticPullThaddius : public SpellScript
 ** Polarity Shift
 ****************/
 
+// 28089 - Polarity Shift
 struct PolarityShift : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx ) const override
@@ -608,6 +563,8 @@ struct PolarityShift : public SpellScript
     }
 };
 
+// 28062 - Positive Charge
+// 28085 - Negative Charge
 struct ThaddiusChargeDamage : public SpellScript
 {
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex effIdx) const override
@@ -634,6 +591,8 @@ struct ThaddiusChargeDamage : public SpellScript
     }
 };
 
+// 28059 - Positive Charge
+// 28084 - Negative Charge
 struct ThaddiusCharge : public AuraScript
 {
     void OnApply(Aura* aura, bool apply) const override
@@ -679,6 +638,7 @@ struct ThaddiusCharge : public AuraScript
     }
 };
 
+// 28359 - Trigger Teslas
 struct TriggerTeslas : SpellScript
 {
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex effIdx) const override
@@ -700,6 +660,8 @@ struct TriggerTeslas : SpellScript
     }
 };
 
+// 28098 - Stalagg Tesla Effect
+// 28110 - Feugen Tesla Effect
 struct ThaddiusTeslaEffect : SpellScript
 {
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex effIdx) const override
@@ -750,6 +712,8 @@ struct ThaddiusTeslaEffect : SpellScript
     }
 };
 
+// 28096 - Stalagg Chain
+// 28111 - Feugen Chain
 struct ThaddiusTeslaChain : public AuraScript
 {
     void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override

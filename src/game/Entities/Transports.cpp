@@ -92,6 +92,7 @@ void MapManager::LoadTransports()
 
         transportTemplate->pathTime = period;
         transportTemplate->keyFrames.back().DepartureTime = period;
+        transportTemplate->counter = count + 1;
 
         m_transportsByMap[pMapInfo->MapID].push_back(transportTemplate);
         m_transportsByEntry[entry].push_back(transportTemplate);
@@ -115,6 +116,8 @@ void MapManager::LoadTransports()
         }
         while (queryResult->NextRow());
     }
+
+    m_transportCounter = count + 2;
 
     sLog.outString(">> Loaded %u transports", count);
     sLog.outString();
@@ -164,14 +167,15 @@ void Transport::LoadTransport(TransportTemplate const& transportTemplate, Map* m
 
     // If we someday decide to use the grid to track transports, here:
     t->SetMap(map);
-    t->Object::AddToWorld();
 
     // creates the Gameobject
-    if (!t->Create(transportTemplate.entry, map->GetId(), x, y, z, o, GO_ANIMPROGRESS_DEFAULT, 0))
+    if (!t->Create(transportTemplate.counter, transportTemplate.entry, map->GetId(), x, y, z, o, GO_ANIMPROGRESS_DEFAULT, 0))
     {
         delete t;
         return;
     }
+
+    t->Object::AddToWorld();
 
     map->AddTransport(t);
 
@@ -181,7 +185,7 @@ void Transport::LoadTransport(TransportTemplate const& transportTemplate, Map* m
         t->UpdateForMap(map, true);
 }
 
-bool Transport::Create(uint32 guidlow, uint32 mapid, float x, float y, float z, float ang, uint8 animprogress, uint16 dynamicHighValue)
+bool Transport::Create(uint32 counter, uint32 entry, uint32 mapid, float x, float y, float z, float ang, uint8 animprogress, uint16 dynamicHighValue)
 {
     Relocate(x, y, z, ang);
     // instance id and phaseMask isn't set to values different from std.
@@ -189,17 +193,17 @@ bool Transport::Create(uint32 guidlow, uint32 mapid, float x, float y, float z, 
     if (!IsPositionValid())
     {
         sLog.outError("Transport (GUID: %u) not created. Suggested coordinates isn't valid (X: %f Y: %f)",
-                      guidlow, x, y);
+            counter, x, y);
         return false;
     }
 
-    Object::_Create(guidlow, guidlow, 0, HIGHGUID_MO_TRANSPORT);
+    Object::_Create(counter, counter, 0, HIGHGUID_MO_TRANSPORT);
 
-    GameObjectInfo const* goinfo = ObjectMgr::GetGameObjectInfo(guidlow);
+    GameObjectInfo const* goinfo = ObjectMgr::GetGameObjectInfo(entry);
 
     if (!goinfo)
     {
-        sLog.outErrorDb("Transport not created: entry in `gameobject_template` not found, guidlow: %u map: %u  (X: %f Y: %f Z: %f) ang: %f", guidlow, mapid, x, y, z, ang);
+        sLog.outErrorDb("Transport not created: entry in `gameobject_template` not found, entry: %u map: %u  (X: %f Y: %f Z: %f) ang: %f", entry, mapid, x, y, z, ang);
         return false;
     }
 
@@ -233,7 +237,7 @@ bool Transport::Create(uint32 guidlow, uint32 mapid, float x, float y, float z, 
 
     SetName(goinfo->name);
 
-    GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+    GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
     return true;
 }
@@ -261,6 +265,12 @@ void Transport::SpawnPassengers()
     }
 }
 
+void Transport::SpawnPassengersIfDespawned()
+{
+    if (m_staticPassengers.empty())
+        SpawnPassengers();
+}
+
 void Transport::DespawnPassengers()
 {
     auto passengerCopy = m_staticPassengers;
@@ -273,6 +283,11 @@ void Transport::DespawnPassengers()
         }
     }
     m_staticPassengers.clear();
+}
+
+bool Transport::IsCrossMapTransport() const
+{
+    return m_transportTemplate.mapsUsed.size() > 1;
 }
 
 void Transport::TeleportTransport(uint32 newMapid, float x, float y, float z, float /*o*/)
@@ -394,7 +409,7 @@ bool GenericTransport::AddPassenger(WorldObject* passenger, bool adjustCoords)
                 AddPetToTransport(unitPassenger, miniPet);
         }
 
-        if (passenger->GetDbGuid())
+        if (passenger->GetDbGuid() && (passenger->IsCreature() || passenger->IsGameObject()))
             m_staticPassengers.insert(passenger->GetObjectGuid());
     }
     return true;
@@ -573,8 +588,8 @@ float Transport::CalculateSegmentPos(float now)
     KeyFrame const& frame = *m_currentFrame;
     float const speed = float(m_goInfo->moTransport.moveSpeed);
     float const accel = float(m_goInfo->moTransport.accelRate);
-    float timeSinceStop = frame.TimeFrom + (now - (1.0f / IN_MILLISECONDS) * frame.DepartureTime);
-    float timeUntilStop = frame.TimeTo - (now - (1.0f / IN_MILLISECONDS) * frame.DepartureTime);
+    float timeSinceStop = frame.TimeFrom + (now - (1.0f / float(IN_MILLISECONDS)) * frame.DepartureTime);
+    float timeUntilStop = frame.TimeTo - (now - (1.0f / float(IN_MILLISECONDS)) * frame.DepartureTime);
     float segmentPos, dist;
     float accelTime = m_transportTemplate.accelTime;
     float accelDist = m_transportTemplate.accelDist;
@@ -706,7 +721,7 @@ void ElevatorTransport::Update(const uint32 diff)
                 if (eventId)
                 {
                     m_eventTriggered = true;
-                    StartEvents_Event(GetMap(), eventId, this, this, true);
+                    GetMap()->StartEvent(eventId, this, this, true);
                 }
             }
         }
@@ -796,6 +811,9 @@ void GenericTransport::UpdatePassengerPosition(WorldObject* passenger)
         case TYPEID_DYNAMICOBJECT:
             GetMap()->DynamicObjectRelocation(static_cast<DynamicObject*>(passenger), x, y, z, o);
             break;
+        case TYPEID_CORPSE:
+            GetMap()->CorpseRelocation(static_cast<Corpse*>(passenger), x, y, z, o);
+            break;
         default:
             break;
     }
@@ -844,7 +862,7 @@ void Transport::UpdateForMap(Map const* targetMap, bool newMap)
             if (this != player->GetTransport())
             {
                 UpdateData updateData;
-                BuildCreateUpdateBlockForPlayer(&updateData, player);
+                BuildCreateUpdateBlockForPlayer(updateData, player);
                 WorldPacket packet = updateData.BuildPacket(0); // always only one packet
                 player->SendDirectMessage(packet);
                 player->AddAtClient(this);
@@ -854,7 +872,7 @@ void Transport::UpdateForMap(Map const* targetMap, bool newMap)
     else
     {
         UpdateData updateData;
-        BuildOutOfRangeUpdateBlock(&updateData);
+        BuildOutOfRangeUpdateBlock(updateData);
         WorldPacket packet = updateData.BuildPacket(0); // always only one packet
         for (const auto& itr : pl)
         {
@@ -874,7 +892,7 @@ void Transport::DoEventIfAny(TaxiPathNodeEntry const& node, bool departure)
     {
         DEBUG_FILTER_LOG(LOG_FILTER_TRANSPORT_MOVES, "Taxi %s event %u of node %u of %s \"%s\") path", departure ? "departure" : "arrival", eventid, node.index, GetGuidStr().c_str(), GetName());
 
-        StartEvents_Event(GetMap(), eventid, this, this, departure);
+        GetMap()->StartEvent(eventid, this, this, departure);
     }
 }
 
